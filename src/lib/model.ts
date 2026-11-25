@@ -1,0 +1,8 @@
+export type Metrics={active:number; unique:number; minutes:number; retention:number; liquidity:number}
+export type Game={chainId?:56;gasToken?:"BNB";id:string; name:string; ticker:string; genre:string; art:number; description:string; developer:string; metrics:Metrics; targets:Metrics; suspicious:number; cap:number; volume:number; change:number; price:number; history:number[]; migrated?:{id:string;date:string}; ready?:boolean; supply:number; tokenName?:string; utility:string; url?:string; thumbnail?:string; returning:number; sessions:Session[]; rolling?:Record<string,number>; verifiedSessions?:number; claimed:string[]; featured?:boolean}
+export type PlayEvent={kind:'Started'|'Movement'|'Coin'|'Encounter'|'Damage'|'Completed'|'Abandoned'; time:number; detail:string}
+export type Session={id:string; account:string; at:number; seconds:number; coins:number; actions:number; activeSeconds?:number; score?:number; encounters?:number; outcome?:'Victory'|'Game over'|'Abandoned'|'In progress'; events?:PlayEvent[]; legacyVerified?:boolean}
+export type Trade={id:string;game:string;side:'Buy'|'Sell';amount:number;output:number;fee:number;at:number}
+export type FeeTier={min:number;rate:number}
+export type Receipt={currency?:string;burned?:number;id:string; at:number; kind:'Trade'|'Cosmetic'|'Launch'; game:string; account:string; label:string; gross:number; platform:number; developer:number}
+export type State={games:Game[];watch:string[];bnb:number;tokens:Record<string,number>; trades:Trade[];wallet:boolean;tiers:FeeTier[];player:string; receipts:Receipt[];owned:string[];skin:string;diamond:boolean;muted:boolean;rewardPool:number;guide:number|null}

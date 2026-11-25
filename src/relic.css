@@ -1,0 +1,260 @@
+/* The vault uses inlaid brass, dark stone and polished jade. */
+.relic-game,
+.relic-market {
+  --relic-ink: #f7f2df;
+  --relic-muted: #b6c7bd;
+  --relic-jade: #95e5bb;
+  --relic-brass: #e1b67b;
+  min-width: 0;
+}
+
+.relic-game {
+  isolation: isolate;
+  position: relative;
+  overflow: hidden;
+  color: var(--relic-ink);
+  border: 1px solid #40564b;
+  border-radius: 14px;
+  padding: clamp(14px, 2.4vw, 28px);
+  background:
+    radial-gradient(ellipse at 82% 0, #33523d80, transparent 48%),
+    linear-gradient(135deg, #20362f, #14231f 54%, #111916);
+}
+
+.relic-head,
+.relic-hud,
+.relic-tabs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.relic-head {
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.relic-game h2,
+.relic-market h2 {
+  color: var(--relic-ink);
+}
+
+.relic-head h2 svg,
+.relic-market h2 svg {
+  color: var(--relic-brass);
+}
+
+.relic-game p,
+.relic-market p {
+  color: var(--relic-muted);
+}
+
+.relic-board {
+  position: relative;
+  width: min(100%, 670px);
+  margin: 18px auto;
+  padding: clamp(12px, 2.4vw, 24px);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(7px, 1.3vw, 15px);
+  border: 1px solid #8d734d;
+  border-radius: 13px;
+  box-shadow: inset 0 0 0 4px #1b2922, inset 0 0 0 5px #a88c573f, 0 8px 24px #080e0b75;
+  background:
+    radial-gradient(circle at 7px 7px, #e7c795 1px, #776144 2px, transparent 3px),
+    radial-gradient(circle at calc(100% - 7px) 7px, #e7c795 1px, #776144 2px, transparent 3px),
+    radial-gradient(circle at 7px calc(100% - 7px), #e7c795 1px, #776144 2px, transparent 3px),
+    radial-gradient(circle at calc(100% - 7px) calc(100% - 7px), #e7c795 1px, #776144 2px, transparent 3px),
+    repeating-linear-gradient(130deg, transparent 0 13px, #a6b59b09 13px 14px),
+    radial-gradient(ellipse at top, #3b4734, #17221c 78%);
+}
+
+.relic-tile {
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  min-height: clamp(86px, 11vw, 128px);
+  display: flex;
+  flex-flow: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 11px 5px;
+  user-select: none;
+  touch-action: manipulation;
+  color: #ead2a5;
+  border: 1px solid #87937c;
+  border-bottom-color: #485545;
+  border-radius: 8px;
+  background:
+    linear-gradient(142deg, transparent 0 31%, #aec2a812 31.5%, transparent 34% 69%, #0b1a1660 70%, transparent 71%),
+    linear-gradient(155deg, #65735e, #364b3e 38%, #293c32 75%, #203128);
+  box-shadow: inset 0 2px 1px #d6d4ad50, inset 0 -4px 0 #121f19ad, 0 3px 4px #101b13;
+  transition: transform .15s ease, filter .15s ease;
+}
+
+.relic-tile::before,
+.relic-tile::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.relic-tile::before {
+  inset: 6px;
+  z-index: -1;
+  border: 1px solid #bfb38f55;
+  border-radius: 4px;
+  background:
+    linear-gradient(135deg, #bca477a8 5px, transparent 5px) top left,
+    linear-gradient(315deg, #a58b5d91 5px, transparent 5px) bottom right;
+  background-size: 11px 11px;
+  background-repeat: no-repeat;
+}
+
+.relic-tile::after {
+  width: 33px;
+  height: 33px;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(45deg);
+  border: 1px solid #d0b99238;
+  box-shadow: 0 0 0 3px #28372c70, 0 0 0 4px #d0b9921c;
+  z-index: -1;
+}
+
+.relic-tile svg {
+  width: clamp(22px, 3vw, 30px);
+  height: clamp(22px, 3vw, 30px);
+  stroke-width: 1.8px;
+  filter: drop-shadow(0 1px 1px #111e17);
+}
+
+.relic-tile span {
+  max-width: 100%;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+  font-weight: 670;
+  font-size: clamp(10px, 1.6vw, 13px);
+  line-height: 1.15;
+  text-shadow: 0 1px 2px #18251b;
+}
+
+.relic-tile.revealed {
+  color: #ffe5ab;
+  border-color: #d4aa65;
+  background: radial-gradient(ellipse at 50% 38%, #80603d, #53442e 57%, #383226);
+}
+
+.relic-tile.found {
+  opacity: 1;
+  color: #c2ffe2;
+  border-color: #71b296;
+  background: radial-gradient(ellipse at 50% 30%, #407561, #294d40 58%, #193c32);
+}
+
+.relic-tile.found::after,
+.relic-tile.revealed::after {
+  border-color: currentColor;
+  opacity: .22;
+}
+
+.relic-tile:focus-visible,
+.relic-tabs button:focus-visible {
+  outline: 3px solid #ffe5a5;
+  outline-offset: 3px;
+}
+
+@media (hover: hover) {
+  .relic-tile:hover:not(:disabled) {
+    transform: translateY(-2px);
+    filter: brightness(1.1);
+  }
+}
+
+.relic-tile:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.relic-hud {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--relic-muted);
+}
+
+.relic-hud strong,
+.relic-hud b {
+  color: var(--relic-jade);
+}
+
+.relic-market {
+  margin-top: 16px;
+  color: var(--relic-ink);
+}
+
+.relic-tabs {
+  margin: 12px 0;
+  gap: 6px;
+}
+
+.relic-tabs button {
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid #3e4b42;
+  border-radius: 6px;
+  color: #c0cec3;
+  background: #222a25;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.relic-tabs button:is(.active, .selected, [aria-pressed="true"], [aria-selected="true"]) {
+  color: #c1f5d8;
+  background: #254034;
+  border-color: #60816b;
+}
+
+.relic-inventory {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 215px), 1fr));
+  gap: 10px;
+}
+
+.relic-card,
+.relic-sale,
+.relic-quote,
+.relic-receipt {
+  min-width: 0;
+  padding: 14px;
+  border-radius: 8px;
+  border: 1px solid #3b4b41;
+  background: #1d2722;
+}
+
+.relic-sale + .relic-sale,
+.relic-receipt + .relic-receipt {
+  margin-top: 8px;
+}
+
+.relic-quote {
+  background: #302b21;
+  border-color: #69573b;
+}
+
+.relic-receipt {
+  border-left: 3px solid #7ec9a2;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 560px) {
+  .relic-board { margin: 13px auto; }
+  .relic-card, .relic-sale, .relic-receipt, .relic-quote { padding: 11px; }
+  .relic-tabs button { min-height: 40px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .relic-tile { transition: none; }
+}
