@@ -1,4 +1,6 @@
 // Each sold listing is the immutable journal entry for ownership and all four transfers.
+const reviewDelay=3000
+const offerLifetime=300000
 const startingFunds=2_000_000
 const owner=`COALESCE((SELECT l.buyer FROM relic_listings l WHERE l.item=i.id AND l.status='sold' ORDER BY l.rowid DESC LIMIT 1),i.mintedTo)`
 const wallet=`(? + (SELECT COALESCE(SUM(price*99/100),0) FROM relic_listings WHERE room=? AND seller=? AND status='sold')
@@ -27,13 +29,20 @@ function publicRun(row){
 async function snapshot(db,room,actor){
  const result=await db.batch([
   statement(db,'SELECT '+wallet+' AS balance',...walletArgs(room,actor)),
-  statement(db,`SELECT i.id,i.name,l.id AS listing,l.price FROM relic_items i LEFT JOIN relic_listings l ON l.item=i.id AND l.status='open' WHERE i.room=? AND ${owner}=? ORDER BY i.rowid DESC`,room,actor),
+  statement(db,`SELECT i.id,i.name,l.id AS listing,l.price,(SELECT sale.price FROM relic_listings sale WHERE sale.item=i.id AND sale.status='sold' ORDER BY sale.rowid DESC LIMIT 1) AS lastPrice FROM relic_items i LEFT JOIN relic_listings l ON l.item=i.id AND l.status='open' WHERE i.room=? AND ${owner}=? ORDER BY i.rowid DESC`,room,actor),
   statement(db,'SELECT '+listingCols+joinListings+" WHERE l.room=? AND l.status='open' ORDER BY l.rowid DESC LIMIT 100",room),
   statement(db,'SELECT '+listingCols+joinListings+" WHERE l.room=? AND l.status='sold' AND (l.buyer=? OR l.seller=?) ORDER BY l.soldAt DESC LIMIT 50",room,actor,actor),
   statement(db,'SELECT * FROM relic_runs WHERE room=? AND player=?',room,actor),
-  statement(db,"SELECT COUNT(*) AS sales,COALESCE(SUM(price),0) AS volume,COALESCE(SUM(price/200),0) AS platform,COALESCE(SUM(price/200),0) AS burned FROM relic_listings WHERE room=? AND status='sold'",room)
+  statement(db,"SELECT COUNT(*) AS sales,COALESCE(SUM(price),0) AS volume,COALESCE(SUM(price/200),0) AS platform,COALESCE(SUM(price/200),0) AS burned FROM relic_listings WHERE room=? AND status='sold'",room),
+  statement(db,`SELECT o.id AS offerId,o.buyer,o.status AS offerStatus,o.unlockAt,o.expiresAt,l.id,l.item,i.name,l.seller,l.price
+   FROM relic_offers o JOIN relic_listings l ON l.id=o.listing JOIN relic_items i ON i.id=l.item
+   WHERE l.room=? AND l.status='open' AND (l.seller=? OR o.buyer=?) AND o.status IN ('requested','approved') AND o.expiresAt>?
+   ORDER BY o.rowid DESC LIMIT 100`,room,actor,actor,Date.now()),
+  statement(db,`SELECT o.id AS offerId,i.name,o.expiresAt FROM relic_offers o JOIN relic_listings l ON l.id=o.listing JOIN relic_items i ON i.id=l.item
+   WHERE l.room=? AND l.status='open' AND (l.seller=? OR o.buyer=?) AND o.status IN ('requested','approved') AND o.expiresAt<=?
+   ORDER BY o.expiresAt DESC LIMIT 5`,room,actor,actor,Date.now())
  ])
- return {actor,balance:result[0].results[0].balance,items:result[1].results,listings:result[2].results,receipts:result[3].results,run:publicRun(result[4].results[0]),totals:result[5].results[0]}
+ return {actor,balance:result[0].results[0].balance,items:result[1].results,listings:result[2].results,receipts:result[3].results,run:publicRun(result[4].results[0]),totals:result[5].results[0],offers:result[6].results,expiredOffers:result[7].results}
 }
 function shuffled(){
  const values=[0,0,1,1,2,2]
@@ -85,22 +94,59 @@ async function act(db,room,actor,b,mentor){
   const r=await exec("UPDATE relic_listings SET status='cancelled' WHERE id=? AND room=? AND seller=? AND status='open'",b.id,room,actor)
   check(changed(r),'Listing already closed or belongs to another seller.');return
  }
- if(b.action==='buy'){
+ if(b.action==='offer'){
   check(typeof b.id==='string'&&Number.isSafeInteger(b.price),'Invalid purchase quote.',400)
-  const r=await exec(`UPDATE relic_listings SET status='sold',buyer=?,soldAt=? WHERE id=? AND room=? AND price=? AND seller<>? AND status='open' AND price<=${wallet}`,actor,Date.now(),b.id,room,b.price,actor,...walletArgs(room,actor))
+  const now=Date.now()
+  const r=await exec(`INSERT INTO relic_offers (id,listing,buyer,status,expiresAt)
+   SELECT ?,l.id,?,'requested',? FROM relic_listings l
+   WHERE l.id=? AND l.room=? AND l.price=? AND l.status='open' AND l.seller<>? AND l.price<=${wallet}
+   AND NOT EXISTS (SELECT 1 FROM relic_offers o WHERE o.listing=l.id AND o.buyer=? AND o.status IN ('requested','approved') AND o.expiresAt>?)`,
+   crypto.randomUUID(),actor,now+offerLifetime,b.id,room,b.price,actor,...walletArgs(room,actor),actor,now)
   if(!changed(r)){
-   const prior=await one(db,'SELECT buyer,status,price,seller FROM relic_listings WHERE id=? AND room=?',b.id,room)
+   const listing=await one(db,'SELECT price,seller,status FROM relic_listings WHERE room=? AND id=?',room,b.id)
+   check(listing?.status==='open','Listing closed.')
+   check(listing.seller!==actor,'You already own this relic.')
+   check(listing.price===b.price,'The quoted price has changed.')
+   const account=await one(db,'SELECT '+wallet+' AS balance',...walletArgs(room,actor))
+   check(account.balance>=b.price,'Insufficient RELIC balance.')
+   throw new MarketError(409,'You already have a pending request for this relic.')
+  }
+  return
+ }
+ if(b.action==='approve'||b.action==='closeOffer'){
+  check(typeof b.id==='string','Missing trade request.',400)
+  const now=Date.now()
+  const approve=b.action==='approve'
+  const r=await exec(`UPDATE relic_offers SET status=?,unlockAt=? WHERE id=? AND expiresAt>? AND status ${approve?"='requested'":"IN ('requested','approved')"}
+   AND EXISTS (SELECT 1 FROM relic_listings l WHERE l.id=relic_offers.listing AND l.room=? AND l.status='open'
+   AND ${approve?'l.seller=?':'(l.seller=? OR relic_offers.buyer=?)'})`,
+   approve?'approved':'closed',approve?now+reviewDelay:null,b.id,now,room,actor,...(approve?[]:[actor]))
+  check(changed(r),'Trade request is no longer available.')
+  return
+ }
+ if(b.action==='buy'){
+  check(typeof b.id==='string'&&typeof b.offerId==='string'&&Number.isSafeInteger(b.price),'Invalid purchase quote.',400)
+  const now=Date.now()
+  const r=await exec(`UPDATE relic_listings SET status='sold',buyer=?,soldAt=?
+   WHERE id=? AND room=? AND price=? AND seller<>? AND status='open' AND price<=${wallet}
+   AND EXISTS (SELECT 1 FROM relic_offers o WHERE o.id=? AND o.listing=relic_listings.id AND o.buyer=? AND o.status='approved' AND o.unlockAt<=? AND o.expiresAt>?)`,
+   actor,now,b.id,room,b.price,actor,...walletArgs(room,actor),b.offerId,actor,now,now)
+  if(!changed(r)){
+   const prior=await one(db,`SELECT l.buyer,l.status,l.price,o.status AS offerStatus,o.expiresAt,o.unlockAt FROM relic_listings l JOIN relic_offers o ON o.listing=l.id
+    WHERE l.id=? AND l.room=? AND o.id=? AND o.buyer=?`,b.id,room,b.offerId,actor)
    if(prior?.buyer===actor&&prior.status==='sold'&&prior.price===b.price)return
-   check(prior?.status==='open','Listing closed. No funds taken.')
-   check(prior.seller!==actor,'You own this listing. No funds taken.')
-   check(prior.price===b.price,'Quote changed. No funds taken.')
-   throw new MarketError(409,'Insufficient market balance. No funds taken.')
+   check(prior?.status==='open','Trade unavailable or closed. No funds taken.')
+   check(prior.price===b.price,'Price changed. Review the listing again.')
+   check(prior.expiresAt>now,'Request expired. Send a new request.')
+   check(prior.offerStatus==='approved','Seller approval is required.')
+   check(prior.unlockAt<=now,'Review period still in progress.')
+   throw new MarketError(409,'Insufficient RELIC balance. No funds taken.')
   }
   return
  }
  if(b.action==='reset'){
   check(mentor,'Reset is only available in your private mentor room.',403)
-  await db.batch(['relic_listings','relic_items','relic_runs'].map(table=>statement(db,'DELETE FROM '+table+' WHERE room=?',room)))
+  await db.batch([statement(db,'DELETE FROM relic_offers WHERE listing IN (SELECT id FROM relic_listings WHERE room=?)',room),...['relic_listings','relic_items','relic_runs'].map(table=>statement(db,'DELETE FROM '+table+' WHERE room=?',room))])
   return
  }
  throw new MarketError(400,'Unknown action.')
@@ -111,11 +157,11 @@ export async function market(request,db){
   const user=request.headers.get('oai-authenticated-user-id')
   check(user,'Sign in to play and trade.',401)
   const url=new URL(request.url),mode=url.searchParams.get('mode')??'shared'
-  check(['shared','mentor'].includes(mode),'Unknown market.',400)
-  const mentor=mode==='mentor',key=await playerCode(user)
+  check(['shared','mentor','stage'].includes(mode),'Unknown market.',400)
+  const mentor=mode!=='shared',key=await playerCode(user)
   const actor=mentor?(url.searchParams.get('role')??'Seller'):'Explorer-'+key.slice(0,32)
   check(!mentor||roles.includes(actor),'Unknown mentor role.',400)
-  const room=mentor?'relic-v2-mentor-'+key:'relic-v2-shared'
+  const room=mentor?'relic-v2-'+mode+'-'+key:'relic-v2-shared'
   if(request.method==='POST'){
    check(request.headers.get('origin')===url.origin&&request.headers.get('content-type')?.startsWith('application/json'),'Use the same-origin game client.',403)
    const raw=await request.text();check(raw.length<=2048,'Request too large.',413)
@@ -126,4 +172,35 @@ export async function market(request,db){
   }else check(request.method==='GET','Method unavailable.',405)
   return json(await snapshot(db,room,actor))
  }catch(e){return json({error:e instanceof MarketError?e.message:'Market unavailable. Refresh to confirm the latest ledger.'},e instanceof MarketError?e.status:503)}
+}
+
+export async function community(request,db){
+ const json=(body,status=200)=>Response.json(body,{status,headers:noCache})
+ try{
+  const user=request.headers.get('oai-authenticated-user-id')
+  check(user,'Sign in to join the community.',401)
+  const url=new URL(request.url)
+  const channel=url.searchParams.get('channel')
+  check(channel==='callouts','Unknown channel.',400)
+  const author=(await playerCode(user)).slice(0,32)
+  if(request.method==='POST'){
+   check(request.headers.get('origin')===url.origin&&request.headers.get('content-type')?.startsWith('application/json'),'Use the same-origin RoFun client.',403)
+   const raw=await request.text()
+   check(raw.length<=4096,'Message too large.',413)
+   let data
+   try{data=JSON.parse(raw)}catch{throw new MarketError(400,'Invalid message.')}
+   const body=typeof data?.body==='string'?data.body.trim():''
+   check(body.length>0&&body.length<=180,'Check the message length.',400)
+   const now=Date.now()
+   const result=await statement(db,`INSERT INTO community_posts (id,channel,author,body,createdAt)
+    SELECT ?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM community_posts WHERE author=? AND createdAt>?)`,
+    crypto.randomUUID(),channel,author,body,now,author,now-1000).run()
+   check(changed(result),'Wait a moment before posting again.',429)
+  }else check(request.method==='GET','Method unavailable.',405)
+  const result=await statement(db,`SELECT id,body,createdAt,author=? AS mine,'Player '||substr(author,1,7) AS authorLabel
+   FROM community_posts WHERE channel=? ORDER BY createdAt DESC,rowid DESC LIMIT 50`,author,channel).all()
+  return json({posts:result.results})
+ }catch(error){
+  return json({error:error instanceof MarketError?error.message:'Community feed unavailable. Try again.'},error instanceof MarketError?error.status:503)
+ }
 }

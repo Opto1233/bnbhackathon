@@ -2,6 +2,7 @@ import {Activity,ArrowRight,Bookmark,ChevronRight,Gamepad2,Play,ShieldCheck,User
 import type {Game,State} from '../lib/model'
 import {genres,image,money,num} from '../lib/data'
 import {graduation} from '../lib/graduation'
+import {Friends} from './community'
 import {Button} from './ui/button'
 export type OpenGame=(g:Game, tab?:string)=>void
 export function GameCard({g,open,watch,toggle}:{g:Game;open:OpenGame;watch:boolean;toggle:()=>void}){
@@ -30,7 +31,8 @@ export function Catalog({state,page,query,genre,setGenre,open,toggle,navigate}:{
  const listing=page==='Watchlist'?filtered.filter(g=>state.watch.includes(g.id)):page==='Pre-Migration'?filtered.filter(g=>!g.migrated):page==='Migrated'?select('Recently Migrated'):select(page==='New Games'?'New Releases':page==='Trending'?'Trending Games':page)
  const cards=(entries:Game[])=>entries.length?<div className="card-grid">{entries.map(g=><GameCard key={g.id} g={g} open={open} watch={state.watch.includes(g.id)} toggle={()=>toggle(g.id)}/>)}</div>:<div className="empty panel">{page==='Watchlist'?'Save a game to see it here.':'No games match these filters.'}</div>
  return <>
- <div className="heading"><div><h1>{query?'Search results':page==='Discover'?'Discover Games':page}</h1><p>{query?`Games matching “${query}”`:page==='Discover'?'Play new worlds. Back games with real players.':page==='Watchlist'?'Track your saved games and tokens.':'Explore games and track their Proof of Play progress.'}</p></div><button className="demo-link" onClick={()=>navigate('Demo')}><Zap size={15}/> Hackathon Demo <ChevronRight size={14}/></button></div>
+ {landing&&<Friends arena={hero} open={open} openSocial={()=>navigate('Social')}/>}
+ <div className="heading"><div><h1>{query?'Search results':page==='Discover'?'Discover Games':page}</h1><p>{query?`Games matching “${query}”`:page==='Discover'?'Play new worlds. Back games with real players.':page==='Watchlist'?'Track your saved games and tokens.':'Explore games and track their Proof of Play progress.'}</p></div><button className="demo-link" onClick={()=>navigate('Trade Demo')}><Zap size={15}/> Start demo <ChevronRight size={14}/></button></div>
  {landing&&<section className="hero" style={{backgroundImage:`linear-gradient(90deg,#131216 2%,#131216f2 12%,#141216bc 37%,transparent 78%),url("${image(hero)}")`}}><div className="hero-content"><div className="feature"><span/> FEATURED GAME</div><h2>RoFun Arena</h2><div className="hero-tags"><span className="badge yellow">$ARENA</span><span className="badge gray"><Gamepad2 size={13}/> Survival</span><span className="badge gray"><ShieldCheck size={13}/> Proof of Play</span></div><p>{hero.description}</p><div className="hero-actions"><Button variant="primary" onClick={()=>open(hero,'Play')}><Play size={15} fill="currentColor"/> Play Now</Button><Button onClick={()=>open(hero)}>View Game <ArrowRight size={15}/></Button></div></div><div className="hero-live"><span/> {num(hero.metrics.active)} verified active <Activity size={15}/></div></section>}
  {landing&&genre==='All Games'&&<section className="panel"><div className="section-title"><div><h2>Relic Vale</h2><p>Recover relics in a memory vault and trade them with other players.</p></div><Button onClick={()=>open(games.find(g=>g.id==='relic')!,'Play')}>Play Relic Vale</Button></div></section>}
  <div className="filters">{genres.map(item=><button key={item} className={genre===item?'selected':''} onClick={()=>setGenre(item)}>{item==='All Games'&&<Gamepad2 size={15}/>} {item}</button>)}</div>

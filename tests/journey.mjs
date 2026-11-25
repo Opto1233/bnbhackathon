@@ -36,7 +36,7 @@ async function survive(){
 try{
  await page.goto(process.env.ROFUN_URL || 'http://127.0.0.1:4198/')
  await page.clock.install()
- await click('Hackathon Demo');await click('Start guided demo')
+ await click('Demo Mode Simulated environment');await click('Start guided demo')
  await text('Open Discover');await next();await text('Select RoFun Arena');await next()
  await click('Start game');await page.clock.runFor(64);const defaultPixels=await avatarPixels();await next();await survive()
  const first=await snapshot()

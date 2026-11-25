@@ -258,3 +258,7 @@
 @media (prefers-reduced-motion: reduce) {
   .relic-tile { transition: none; }
 }
+.split-terms {display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:.9rem}
+.split-terms>div {display:grid;gap:.3rem}
+.split-terms small {font-size:.85rem}
+.split-terms strong {font-size:1.1rem}

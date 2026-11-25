@@ -21,11 +21,11 @@ export function migrate(g:Game):Game{
 }
 export function Graduation({g,update,compact=false}:{g:Game;update:Update;compact?:boolean}){
  const rank=graduation(g)
- return <section className="panel graduation"><div className="section-title"><h2><ShieldCheck size={21}/> Proof of Play</h2><span className={'badge '+(g.migrated?'green-badge':rank.eligible?'yellow':'gray')}>{rank.status}</span></div><p>{rank.passed} of 5 demonstration requirements met</p>
+ return <section className="panel graduation"><div className="section-title"><h2><ShieldCheck size={21}/> Proof of Play</h2><span className={'badge '+(g.migrated?'green-badge':rank.eligible?'yellow':'gray')}>{rank.status}</span></div><p>{rank.passed} of 5 demonstration requirements met · Sample baseline + demo controls{g.id==='arena'?' + qualified browser sessions':''}</p>
  {rank.rows.map(r=><div className="requirement" key={r.key}><div><span>{r.label} <span className="hint" tabIndex={0} data-tip={r.help}><Info size={13}/></span></span><strong>{num(r.value)}{r.unit} / {num(r.target)}{r.unit}</strong><span className={r.pass?'green':'muted'}>{r.pass?<Check size={16}/>:<Lock size={14}/>} {r.pass?'Pass':'Fail'}</span></div><div className={'track '+(r.pass?'passed':'')}><i style={{width:r.progress+'%'}}/></div></div>)}
  {g.suspicious>0&&<div className="warning"><TriangleAlert size={17}/> {num(g.suspicious)} suspicious accounts excluded from graduation.</div>}
  {g.migrated?<div className="success"><Check size={19}/><div><strong>Simulated migration to PancakeSwap complete</strong><small>{g.migrated.id} · {new Date(g.migrated.date).toLocaleString()}</small></div></div>:<div className="migration-actions">{rank.eligible&&!g.ready&&<Button onClick={()=>update(s=>updateGame(s,g.id,current=>graduation(current).eligible?{...current,ready:true}:current))}>Mark ready</Button>}<Button variant="primary" disabled={!rank.eligible} onClick={()=>update(s=>updateGame(s,g.id,migrate))}>{rank.eligible?<ArrowRight size={16}/>:<Lock size={15}/>} Migrate to PancakeSwap</Button></div>}
- {!compact&&<small className="muted">Demo thresholds apply. Price and market cap do not contribute to eligibility.</small>}</section>
+ {!compact&&<small className="muted">A qualifying Arena run updates active players, lifetime players and average playtime. Migration here is simulated. The proposed OpenFour Migrate module would check verified eligibility before executing migration. <a target="_blank" rel="noreferrer" href="https://github.com/four-meme-community/openfour-docs/blob/main/docs/developer-guide.md">OpenFour developer guide ↗</a></small>}</section>
 }
 export function PlayerAnalytics({g,update}:{g:Game;update:Update}){
  const [range,setRange]=useState('24 hours')

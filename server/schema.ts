@@ -10,3 +10,11 @@ export const listings=sqliteTable('relic_listings',{
 export const runs=sqliteTable('relic_runs',{
  id:text().primaryKey(),room:text().notNull(),player:text().notNull(),revision:integer().notNull(),data:text().notNull(),
 },t=>[uniqueIndex('current_expedition').on(t.room,t.player)])
+export const offers=sqliteTable('relic_offers',{
+ id:text().primaryKey(),listing:text().notNull().references(()=>listings.id,{onDelete:'cascade'}),
+ buyer:text().notNull(),status:text().notNull(),expiresAt:integer().notNull(),unlockAt:integer(),
+},t=>[index('relic_offer_listing').on(t.listing,t.buyer,t.expiresAt)])
+export const communityPosts=sqliteTable('community_posts',{
+ id:text().primaryKey(),channel:text().notNull(),author:text().notNull(),
+ body:text().notNull(),createdAt:integer().notNull(),
+},t=>[index('community_feed').on(t.channel,t.createdAt),index('community_author').on(t.author,t.createdAt)])

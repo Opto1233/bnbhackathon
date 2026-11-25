@@ -1,0 +1,14 @@
+.stage-steps,.stage-accounts,.stage-relic {display:flex;align-items:center;gap:.65rem;flex-wrap:wrap}
+.stage-steps{list-style:none;padding:0;margin:0 0 1rem}
+.stage-steps li{display:flex;align-items:center;gap:.35rem;padding:.5rem .7rem;border-radius:6px;background:#25252e;color:#c9c9d4}
+.stage-steps [aria-current]{color:var(--yellow);background:#342c1a}
+.stage-accounts{margin:1rem 0;align-items:stretch}
+.stage-accounts>div{display:grid;flex:1;min-width:150px;gap:.45rem;padding:.9rem;border:1px solid var(--line);border-radius:.6rem}
+.stage-accounts small,.trade-stage p,.stage-accounts span{font-size:.9rem}
+.stage-accounts strong{font-size:1.05rem}
+.stage-relic{padding:1rem;background:#193531;border:1px solid #396659;border-radius:.7rem;margin:1rem 0}
+.stage-relic>svg{width:40px;height:40px;color:#91e8c8}
+.trade-stage .hero-actions{margin-top:1rem}
+.trade-stage .relic-board{max-width:520px}
+.trade-stage .relic-quote{font-size:1rem}
+@media(max-width:600px){.friends-panel .friend-avatar{width:40px;height:40px}.friends-panel .friend-card{padding:.35rem}.stage-steps li{font-size:.75rem}}

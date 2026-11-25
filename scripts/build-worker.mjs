@@ -12,6 +12,7 @@ await writeFile('dist/server/index.js',(await readFile('server/market.js','utf8'
 export default {async fetch(request,env){
  const path=new URL(request.url).pathname
  if(path==='/api/relic')return market(request,env.DB)
+ if(path==='/api/community')return community(request,env.DB)
  const asset=assets[path==='/'?'/index.html':path]
  if(!Array.isArray(asset))return new Response('Not found',{status:404})
  return new Response(Uint8Array.from(atob(asset[1]),c=>c.charCodeAt(0)),{headers:{'Content-Type':asset[0],'X-Content-Type-Options':'nosniff'}})
