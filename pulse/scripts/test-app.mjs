@@ -44,6 +44,9 @@ for(let i=1;i<=1000;i++){
   const seconds=Math.floor(i/20)*60+59+(i%20)*.0002+(odd?.996:.97),cs=Math.round(seconds*100);
   assert.equal(momentTime(seconds),Math.floor(cs/6000)+':'+((cs%6000)/100).toFixed(2).padStart(5,'0'));
 }
+assert.equal(initial('👩‍💻 Mina'),'👩‍💻');
+assert.equal(stats(null).delta,null);
+assert.equal(stats([[Date.now(),'bad'],['bad',4]]).delta,null);
 `,context);
 vm.runInContext(`
 s=seed();

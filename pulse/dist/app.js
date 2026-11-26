@@ -81,9 +81,10 @@ function save(){
 }
 const chan=id=>s.channels.find(c=>c.id===id), clip=id=>s.clips.find(c=>c.id===id), self=()=>chan(myId()),last=a=>a.at(-1)?.[1]||0, cut=()=>period===3?-Infinity:Date.now()-[1,7,30][period]*day, pnl=id=>s.closed.filter(x=>x.owner===id&&x.t>=cut()).reduce((a,b)=>a+b.pnl,0);
 function stats(history,start=cut()){
-  const baseline=history.filter(([time])=>time<=start).at(-1)?.[1]??(start===-Infinity?history[0]?.[1]:null);
+  const points=Array.isArray(history)?history.filter(point=>Array.isArray(point)&&Number.isFinite(point[0])&&Number.isFinite(Number(point[1]))):[];
+  const baseline=points.filter(([time])=>time<=start).at(-1)?.[1]??(start===-Infinity?points[0]?.[1]:null);
   if(baseline==null)return {delta:null,pct:null};
-  const delta=last(history)-baseline;
+  const delta=(points.at(-1)?.[1]??baseline)-baseline;
   return {delta,pct:baseline?delta/baseline*100:null};
 }
 function growth(n){return n===null?'No baseline yet':(n>=0?'+':'')+fmt(n)+'%';}
@@ -107,7 +108,13 @@ function handleFor(channel){
   const stem=channel?.name.normalize('NFC').toLowerCase().replace(/[^\p{L}\p{M}\p{N}]+/gu,'_').replace(/^_|_$/g,'')||'creator';
   return channel?.shared?stem+'~'+channel.id:channel?.id==='me'?stem+'~me':stem;
 }
-function initial(name){return new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(name||'')[Symbol.iterator]().next().value?.segment||'';}
+function initial(name){
+  const value=String(name||'');
+  try{
+    const segmenter=Intl.Segmenter?new Intl.Segmenter(undefined,{granularity:'grapheme'}):null;
+    return segmenter?.segment(value)[Symbol.iterator]().next().value?.segment||Array.from(value)[0]||'';
+  }catch{return Array.from(value)[0]||'';}
+}
 function followerTotal(channel){
   const local=Object.values(s.profileFollows||{}).filter(ids=>ids.includes(channel.id)).length;
   return last(channel.followers)+local+community.reactions.filter(r=>r.kind==='follow'&&r.target===channel.id).length;
