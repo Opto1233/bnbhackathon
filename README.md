@@ -61,3 +61,7 @@ Use `npm run test:chain` to verify the same contract on local Anvil, including a
 
 - [Official BSC Testnet wallet settings](https://docs.bnbchain.org/bnb-smart-chain/developers/wallet-configuration/)
 - [Official guide to obtaining test BNB](https://docs.bnbchain.org/bnb-smart-chain/developers/faucet/)
+
+## Measure concurrent marketplace confirmations locally
+
+Start a dedicated local preview, then run `ROFUN_URL=http://127.0.0.1:4199 npm run test:market-load -- 100` with the preview's URL. It creates independent rehearsal rooms, sends two purchase confirmations per listing in one burst, and checks ownership, all wallets and fee totals in every room. It reports confirmation latency and response rate for the local Vite and SQLite API. Hosted D1 and BSC Testnet have separate performance characteristics.
