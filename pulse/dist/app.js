@@ -611,6 +611,7 @@ function render(){
   }
   if(!pages.includes(p))p='Clips';
   document.body.classList.toggle('reelsPage',p==='Clips');
+  $('.aboutLink').hidden=p!=='Profile'||Boolean(id&&id!=='me'&&id!==myId());
   $('.accountLink').textContent=window.pulseWallet.signed()?'Wallet':'Sign in';
   $('nav').innerHTML=dockItems.map(([route,label,icon])=>{
     if(route==='Clips'&&p==='Clips')return '<button type="button" class="dockItem center active" data-act="create"><span class="dockIcon" aria-hidden="true">＋</span>Create</button>';
@@ -1033,6 +1034,11 @@ function toast(msg){$('#notice').textContent=msg;clearTimeout(noticeTimer);notic
 function channelForm(next){modal('<h2>Create channel</h2><form id="channel" data-next="'+next+'"><label>Channel name<input name="name" required maxlength="48"></label><button class="primary">Create channel</button></form>');}
 function create(){if(!self())return channelForm('create');modal('<h2>Create video</h2><form id="upload"><label>Video title<input name="title" required maxlength="90"></label><label>Video file<input type="file" name="video" required accept="video/*"></label><button class="primary">Publish video</button></form>');}
 function action(str,el){let [k,v,id]=str.split(':');
+if(k==='about')return modal('<section class="aboutPulse" aria-labelledby="aboutPulseTitle">'+
+  '<h2 id="aboutPulseTitle">About us</h2>'+
+  '<p>Pulse is a short-video platform for discovering creators and trading coins tied to channels and memorable clips.</p>'+
+  '<dl><dt>Creator Coins</dt><dd>Trade coins tied to creator channels on BSC Testnet.</dd>'+
+  '<dt>Moment Coins</dt><dd>Pick and crop a frame from a video, then create a coin and try trading it with a demo balance.</dd></dl></section>');
 if(k==='retrySharedProfile'&&shared)return loadShared();
 if(shared && ['channel','create','launch'].includes(k) && !window.pulseWallet.signed()){
   toast('Sign in with your wallet to publish.');return go('Login/profile');
