@@ -76,10 +76,10 @@ button.tradeSell{background:#b82f46;border-color:#d74961}
 .reelsPage .reelRail .reelTrade span{font-size:23px;filter:none}
 .momentGesture{position:absolute;left:21%;right:21%;top:32%;bottom:32%;padding:0;border:0;background:transparent;touch-action:pan-y;user-select:none;-webkit-touch-callout:none}
 .momentGesture:focus-visible{outline:2px solid #d6fa44;outline-offset:4px}
-dialog[open]:has(#reelTicket,.momentSheet){position:fixed;inset:auto 0 0;margin:0 auto;box-sizing:border-box;width:min(100%,540px);height:auto;max-height:calc(100dvh - 24px);padding:26px 18px calc(18px + env(safe-area-inset-bottom));overflow:auto;border:1px solid #46483d;border-bottom:0;border-radius:22px 22px 0 0;background:#191b17;box-shadow:0 -12px 52px #0009}
-dialog:has(#reelTicket,.momentSheet)::backdrop{background:#060805a8}
-dialog:has(#reelTicket,.momentSheet)::before{position:absolute;inset:8px 0 auto;margin:auto;width:36px;height:4px;background:#777a6a;border-radius:4px;content:""}
-dialog:has(#reelTicket,.momentSheet) .close{z-index:2}
+dialog[open]:has(#reelTicket,#momentTicket,.momentSheet){position:fixed;inset:auto 0 0;margin:0 auto;box-sizing:border-box;width:min(100%,540px);height:auto;max-height:calc(100dvh - 24px);padding:26px 18px calc(18px + env(safe-area-inset-bottom));overflow:auto;border:1px solid #46483d;border-bottom:0;border-radius:22px 22px 0 0;background:#191b17;box-shadow:0 -12px 52px #0009}
+dialog:has(#reelTicket,#momentTicket,.momentSheet)::backdrop{background:#060805a8}
+dialog:has(#reelTicket,#momentTicket,.momentSheet)::before{position:absolute;inset:8px 0 auto;margin:auto;width:36px;height:4px;background:#777a6a;border-radius:4px;content:""}
+dialog:has(#reelTicket,#momentTicket,.momentSheet) .close{z-index:2}
 .reelTradeHeading{display:grid;gap:3px;padding:0 46px 11px 0;margin-bottom:12px;border-bottom:1px solid #3b4034}
 .reelTradeHeading small{font-size:11px;letter-spacing:.09em;color:#d6fa44}
 .reelTradeHeading strong,.momentSheet h2{font-size:23px}
@@ -107,9 +107,9 @@ dialog:has(#reelTicket,.momentSheet) .close{z-index:2}
 .railAction small{font-size:10px;line-height:1}
 .reelsPage .reelRail .reelTrade{color:#19200e}
 dialog[open]:has(.commentsSheet){position:fixed;inset:auto 0 0;margin:0 auto;box-sizing:border-box;width:min(100%,540px);max-height:calc(100dvh - 24px);padding:22px 18px calc(18px + env(safe-area-inset-bottom));border-radius:22px 22px 0 0;background:#191b17}
-dialog[open]:has(#reelTicket,.commentsSheet){animation:pulseSheetUp .24s cubic-bezier(.2,.75,.3,1) both}
+dialog[open]:has(#reelTicket,#momentTicket,.commentsSheet){animation:pulseSheetUp .24s cubic-bezier(.2,.75,.3,1) both}
 @keyframes pulseSheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
-@media(prefers-reduced-motion:reduce){dialog[open]:has(#reelTicket,.commentsSheet){animation:none}}
+@media(prefers-reduced-motion:reduce){dialog[open]:has(#reelTicket,#momentTicket,.commentsSheet){animation:none}}
 .commentsSheet h2{margin:0 40px 8px 0}
 .commentsSheet h2 small,.inboxPerson small{color:#b6bcad}
 .commentList{max-height:52dvh;overflow:auto}
@@ -163,3 +163,17 @@ dialog[open]:has(#reelTicket,.commentsSheet){animation:pulseSheetUp .24s cubic-b
 .momentCropControls .momentZoom{flex:1;min-width:0;margin:0}
 .momentCropReset{flex:none;min-height:40px}
 #momentCropHelp{margin:2px 0 8px;color:#c2c6b8;font-size:12px}
+
+
+.momentTradeStats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}
+.momentTradeStats div{min-width:0;padding:8px;border:1px solid #3e4533;border-radius:9px;background:#22261d}
+.momentTradeStats small,.momentTradeStats strong{display:block;font-size:12px;overflow-wrap:anywhere}
+.momentTradeStats small{color:#bcc6ae;margin-bottom:4px}
+.momentTradeProgress{display:block;color:#d4dec9;font-size:13px}
+.momentTradeProgress progress{display:block;width:100%;margin-top:5px;accent-color:#d6fa44}
+.momentOrderActions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px}
+.momentOrderActions button{min-height:44px}
+.momentOrderPreview:not([hidden]){display:grid;gap:7px;margin-top:12px;padding:10px;border:1px solid #4c563d;border-radius:9px}
+.momentOrderPreview p,.momentTradeStatus{margin:0}
+.momentTradeStatus:not(:empty){margin-top:10px;color:#e2efbe}
+.momentDetailActions{margin-top:10px}

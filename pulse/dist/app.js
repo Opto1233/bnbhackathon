@@ -389,8 +389,93 @@ function render(){
   if(p==='Login')window.pulseWallet.loginPage($('#walletLogin'),()=>go(id==='portfolio'?'Profile':id&&chan(id)?.coin?'Trading/'+id:'Clips'));
 }
 function modal(html){$('#form').innerHTML=html;if(!$('dialog').open)$('dialog').showModal();}
+const momentTradeStorage='pulse-moment-trading-v1';
+const momentUnit=10n**16n, momentCurveCap=500000, momentTarget=momentUnit*3n/10n;
+function momentLedger(){
+  return JSON.parse(localStorage.getItem(momentTradeStorage)||'null')||{cash:String(10n*momentUnit),markets:{}};
+}
+function momentPosition(ledger,id){return ledger.markets[id]||{sold:0,owned:0};}
+function momentPrice(sold){return 4000000000n+8000n*BigInt(sold);}
+function momentReserve(sold){return BigInt(sold)*(momentPrice(0)+momentPrice(sold))/2n;}
+function momentBNB(amount){
+  const decimals=(amount%momentUnit).toString().padStart(16,'0').replace(/0+$/,'');
+  return (amount/momentUnit).toString()+(decimals?'.'+decimals:'');
+}
+function quoteMoment(position,side,requested){
+  if(position.sold===momentCurveCap)throw Error('This coin has reached the end of its demo curve.');
+  if(!Number.isSafeInteger(requested)||requested<=0)throw Error('Enter a whole number of coins.');
+  const buy=side==='buy';
+  if(!buy&&requested>position.owned)throw Error('You do not have enough Moment Coins.');
+  const quantity=buy?Math.min(requested,momentCurveCap-position.sold):requested;
+  const sold=position.sold+(buy?quantity:-quantity);
+  const amount=buy?momentReserve(sold)-momentReserve(position.sold):momentReserve(position.sold)-momentReserve(sold);
+  return {side,requested,quantity,sold,amount,before:position.sold};
+}
+function settleMoment(reelId,preview){
+  const ledger=momentLedger(), position=momentPosition(ledger,reelId), buying=preview.side==='buy';
+  if(position.sold!==preview.before)throw Error('The price changed. Preview the trade again.');
+  const quote=quoteMoment(position,preview.side,preview.requested);
+  const cash=BigInt(ledger.cash);
+  if(buying&&cash<quote.amount)throw Error('Your demo tBNB balance is too low.');
+  ledger.cash=String(cash+(buying?-quote.amount:quote.amount));
+  ledger.markets[reelId]={sold:quote.sold,owned:position.owned+(buying?quote.quantity:-quote.quantity)};
+  localStorage.setItem(momentTradeStorage,JSON.stringify(ledger));
+  return quote;
+}
+function openMomentTrade(reel){
+  const coin=reel&&momentFor(reel.id);
+  if(!coin)return;
+  const ledger=momentLedger(), position=momentPosition(ledger,reel.id);
+  const reserve=momentReserve(position.sold);
+  const complete=position.sold===momentCurveCap;
+  const label=esc(coin.name), reelId=esc(reel.id);
+  modal('<section id="momentTicket" aria-label="Moment Coin trading">'+
+    '<div class="reelTradeHeading"><small>MOMENT MARKET · DEMO</small><strong>'+label+'</strong></div>'+
+    '<p class="momentSource">'+esc(reel.title)+' · '+btn('View captured frame','reelMoment:'+reelId,'subtle')+'</p>'+
+    '<div class="momentTradeStats"><div><small>Next coin</small><strong>'+momentBNB(momentPrice(position.sold))+' tBNB</strong></div>'+
+    '<div><small>Demo balance</small><strong>'+momentBNB(BigInt(ledger.cash))+' tBNB</strong></div>'+
+    '<div><small>Your coins</small><strong>'+fmt(position.owned)+'</strong></div></div>'+
+    '<label class="momentTradeProgress">Curve reserve · '+momentBNB(reserve)+' / 0.30 tBNB<progress max="'+momentTarget+'" value="'+reserve+'"></progress></label>'+
+    (complete?'<p>This coin has completed its demo curve.</p>':
+      '<form id="momentOrder"><label>Moment Coins<input name="quantity" type="number" min="1" max="1000000" step="1" value="100000" required></label>'+
+      '<div class="momentOrderActions"><button class="tradeBuy" type="submit" value="buy">Buy</button><button class="tradeSell" type="submit" value="sell">Sell</button></div></form>'+
+      '<div class="momentOrderPreview" hidden></div>')+'<p class="momentTradeStatus" role="status"></p></section>');
+  const form=$('#momentOrder');
+  if(!form)return;
+  const panel=$('.momentOrderPreview'), status=$('.momentTradeStatus');
+  form.addEventListener('input',()=>{panel.hidden=true;status.textContent='';});
+  form.addEventListener('submit',event=>{
+    event.preventDefault();event.stopPropagation();
+    if(!form.reportValidity())return;
+    status.textContent='';panel.hidden=true;
+    let quote;
+    try{quote=quoteMoment(momentPosition(momentLedger(),reel.id),event.submitter?.value==='sell'?'sell':'buy',form.elements.quantity.valueAsNumber);}
+    catch(error){status.textContent=error.message;return;}
+    const buy=quote.side==='buy', verb=buy?'Buy':'Sell';
+    panel.hidden=false;
+    panel.innerHTML='<p>'+verb+' '+fmt(quote.quantity)+' coins · '+(buy?'Pay ':'Receive ')+momentBNB(quote.amount)+' tBNB</p>'+
+      (quote.quantity<quote.requested?'<p>Only '+fmt(quote.quantity)+' coins remain. You pay for the filled amount.</p>':'')+
+      (quote.sold===momentCurveCap?'<p>This purchase completes the demo curve and closes trading.</p>':'')+
+      '<small>Platform fee: 0 tBNB</small><button type="button" class="primary">Confirm '+verb+'</button>';
+    const confirm=panel.querySelector('button');
+    confirm.onclick=async()=>{
+      confirm.disabled=true;
+      try{
+        const execute=()=>settleMoment(reel.id,quote);
+        const fill=navigator.locks?await navigator.locks.request(momentTradeStorage,execute):execute();
+        if(!status.isConnected||!$('dialog').open)return;
+        openMomentTrade(reel);
+        $('.momentTradeStatus').textContent=(buy?'Bought ':'Sold ')+fmt(fill.quantity)+' coins for '+momentBNB(fill.amount)+' tBNB.';
+      }catch(error){
+        if(!status.isConnected)return;
+        panel.hidden=true;status.textContent=error.message;
+      }
+    };
+  });
+}
 function openReelTrade(reel,source){
   if(!reel)return;
+  if(momentFor(reel.id))return openMomentTrade(reel);
   const creator=chan(reel.owner);
   if(!creator?.coin)return openMoment(reel,source);
   modal('<div class="reelTradeHeading"><small>CREATOR MARKET</small><strong>'+esc(creator.name)+'</strong></div>'+
@@ -497,7 +582,7 @@ function openMoment(reel,source){
     '<p class="momentSource">'+esc(reel.title)+' · '+esc(chan(reel.owner).name)+'</p>'+
     '<video class="momentPreview" muted playsinline preload="auto" src="'+esc(media)+'"'+(hasCrop?' hidden':' aria-label="Selected frame"')+'></video>'+
     (hasCrop?'<canvas class="momentCrop" width="512" height="512" '+(existing?'role="img" aria-label="Cropped Moment Coin frame"':'tabindex="0" aria-label="Crop preview" aria-describedby="momentCropHelp"')+'></canvas>':'')+
-    (existing?'<h3>'+esc(existing.name)+'</h3><p>'+esc(existing.description)+'</p><p>Frame '+momentTime(existing.time)+' · Created by '+esc(existing.launcher||'You')+'</p><small>Demo Moment Coin</small>':
+    (existing?'<h3>'+esc(existing.name)+'</h3><p>'+esc(existing.description)+'</p><p>Frame '+momentTime(existing.time)+' · Created by '+esc(existing.launcher||'You')+'</p><small>Demo Moment Coin</small><div class="momentDetailActions">'+btn('Trade','tradeMoment:'+esc(reel.id),'primary')+'</div>':
       '<form id="momentLaunch"><label class="momentTimeline">Choose a frame <output></output><input name="frame" type="range" min="0" step=".01" value="0" disabled></label>'+
       '<div class="momentCropControls"><label class="momentZoom">Zoom <output>1.00×</output><input name="zoom" type="range" min="1" max="4" step=".05" value="1"></label><button type="button" class="subtle momentCropReset">Reset crop</button></div>'+
       '<p id="momentCropHelp">Drag the frame or use arrow keys to position it.</p>'+
@@ -598,6 +683,7 @@ if(k==='commentLike'){
   save();el.setAttribute('aria-pressed',String(liked));return;
 }
 if(k==='reelReport')return reportReel(clip(v));
+if(k==='tradeMoment')return openMomentTrade(clip(v));
 if(k==='reelMoment')return openMoment(clip(v),el.closest('.reel')?.querySelector('video'));
 if(k==='reelShare')return shareReel(clip(v));if(k==='reelTrade')return openReelTrade(clip(v),el.closest('.reel')?.querySelector('video'));if(k==='explore'){
   if(v==='leaderboard')return go('Search/Leaderboard');
