@@ -14,7 +14,7 @@ dialog[open]:has(#reelTicket){position:fixed;inset:0 max(8px,env(safe-area-inset
 .reelsPage{--feed-bottom:calc(65px + env(safe-area-inset-bottom));--stage:min(100vw, max(460px,62dvh));background:#09090b;overflow:hidden}.reelsPage header{position:fixed;z-index:3;top:0;left:50%;transform:translateX(-50%);width:var(--stage);height:64px;flex-wrap:nowrap;border:0;padding:10px 16px;gap:12px;background:linear-gradient(#08090cb3,transparent)}.reelsPage .brand{font-size:23px}.reelsPage .brand i{width:27px;height:27px;font-size:25px}.reelsPage .create,.reelsPage .accountLink{border:1px solid #ffffff45;background:#0d0e14aa;color:white;border-radius:18px;font-size:13px;padding:6px 10px}.reelsPage main:has(.feed){max-width:none;padding:0;margin:0}.reelsPage .feed{width:var(--stage);height:calc(100dvh - var(--feed-bottom));min-height:0;margin:auto;overscroll-behavior:contain;scrollbar-width:none}.reelsPage .reel{isolation:isolate;overflow:hidden;max-width:none;background:#171719}.reelsPage .reel::before{content:"";position:absolute;inset:-20px;z-index:-1;background:linear-gradient(#12101533,#14101899),var(--reel-poster,none) center/cover;filter:blur(22px)}.reelsPage .reel video{display:block;object-fit:contain;background:transparent}.reelsPage .memeCaption{inset:17% 7% auto}.reelsPage .reelRail{bottom:66px;right:10px;gap:6px;max-height:calc(100% - 145px)}.reelsPage .railAction:not(.tradeBuy):not(.tradeSell){background:transparent;border-color:transparent;color:white;text-shadow:0 1px 5px black}.reelsPage .railAction:not(.tradeBuy):not(.tradeSell) span{font-size:29px;filter:drop-shadow(0 1px 3px #0009)}.reelsPage .railAction[aria-pressed=true]:not(.tradeBuy):not(.tradeSell){color:#d6fa44}.reelsPage .controls{padding:60px 75px 14px 16px;bottom:38px;text-shadow:0 1px 4px #000}.reelsPage .byline{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.reelsPage .byline .link{font-size:18px;font-weight:750}.reelsPage .byline .coinPill{color:#ddfb80;background:#252b16dd;border:1px solid #869c4488;border-radius:20px;font-size:12px;font-weight:700;padding:3px 8px}.reelsPage .controls h3{font-size:15px;font-weight:500}.reelsPage .feed::-webkit-scrollbar{display:none}
 
 /* Compact navigation, using the same offset for the full-height reel feed. */
-.dock{grid-template-columns:repeat(5,minmax(0,84px));padding:1px 4px calc(2px + env(safe-area-inset-bottom))}
+.dock{grid-template-columns:repeat(4,minmax(0,84px));padding:1px 4px calc(2px + env(safe-area-inset-bottom))}
 .dock .dockItem{min-height:44px;justify-content:center;gap:2px;padding:0;font-size:clamp(9px,2.6vw,11px);line-height:1.2}
 .dockIcon{height:21px;width:32px}
 .dockIcon svg{height:19px;width:19px}
@@ -22,7 +22,7 @@ dialog[open]:has(#reelTicket){position:fixed;inset:0 max(8px,env(safe-area-inset
 .reelsPage{--feed-bottom:calc(47px + env(safe-area-inset-bottom))}
 
 .discovery,.creatorProfile,.rankBoard{max-width:720px;margin-inline:auto}
-.discovery h1,.creatorProfile h1,.rankHero h1{font-size:clamp(27px,5vw,40px);margin:0}
+.discovery h1,.creatorProfile h1{font-size:clamp(27px,5vw,40px);margin:0}
 .viewTabs{display:flex;align-items:center;overflow-x:auto;gap:6px;border-bottom:1px solid #373b32;scrollbar-width:thin}
 .viewTabs button{min-height:44px;flex:1 0 auto;padding:6px 8px;border:0;border-radius:0;border-bottom:2px solid transparent;background:transparent;color:#bdc0b7;font-size:13px;white-space:nowrap}
 .viewTabs button[aria-pressed=true]{color:#d6fa44;border-bottom-color:#d6fa44;font-weight:750}
@@ -53,7 +53,9 @@ dialog[open]:has(#reelTicket){position:fixed;inset:0 max(8px,env(safe-area-inset
 .creatorProfile .portfolio h2{font-size:16px;margin:0}
 .creatorGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px;margin-top:4px}
 .creatorGrid .reelThumb{width:100%;aspect-ratio:3/4;border-radius:5px}
-.rankHero{padding:22px 16px;border-radius:14px;background:linear-gradient(110deg,#383f20,#1a2119 65%);border:1px solid #474e32}
+.discovery > .viewTabs{margin-top:8px;gap:2px}
+.discovery > .viewTabs button{padding-inline:clamp(4px,1vw,8px);font-size:clamp(11px,2.9vw,13px)}
+.discovery .rankBoard{margin-top:12px}
 .rankFilters{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:0 12px}
 .rankFilters .viewTabs{border:0}
 .rankFilters small{color:#afb1a8}
