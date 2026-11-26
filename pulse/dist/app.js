@@ -91,16 +91,16 @@ function search(section){
   return '<div class="discovery"><h1>Explore</h1>'+tabs+content+'</div>';
 }
 const socialIcons={
-  trade:'M3 8h17l-4-4 M21 16H4l4 4',
   like:'M12 21S3 16 3 9a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 7-9 12-9 12Z',
   comments:'M21 11a8.5 8.5 0 0 1-8.5 8.5 10 10 0 0 1-3.5-.7L4 21l1.2-4.5A8.5 8.5 0 1 1 21 11Z M8 11h.1m4 0h.1m4 0h.1',
   save:'M6 3h12v18l-6-4-6 4z',
   report:'M5 21V4c4-4 10 3 14 0v10c-4 3-10-4-14 0',
   repost:'M4 10V6h15l-3-3 M20 14v4H5l3 3',
-  share:'M12 15V3m-4 4 4-4 4 4 M5 11v9h14v-9',
-  tweet:'M4 3h4l12 18h-4z M20 3 4 21'
+  share:'M12 15V3m-4 4 4-4 4 4 M5 11v9h14v-9'
 };
+const tradeSymbol='<span class="tradeSymbol" aria-hidden="true"></span>';
 function reelIcon(kind){
+  if(kind==='trade')return tradeSymbol;
   return '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="'+socialIcons[kind]+'"/></svg>';
 }
 function reelComments(id){return s.comments?.[id]||[];}
@@ -121,13 +121,6 @@ function reelLink(reel){
   const url=new URL(location.href);
   url.hash='Clips/'+encodeURIComponent(reel.id);
   return url.href;
-}
-function shareToX(reel){
-  if(!reel)return;
-  if(reel.owner==='me')return shareReel(reel);
-  const params=new URLSearchParams({text:reel.title,url:reelLink(reel)});
-  const href='https://x.com/intent/post?'+params;
-  modal('<h2>Share on X</h2><p>'+esc(reel.title)+'</p><a class="shareExternal" href="'+esc(href)+'" target="_blank" rel="noopener noreferrer">Open X composer ↗</a>');
 }
 function reportReel(reel){
   if(!reel)return;
@@ -182,7 +175,6 @@ function reelActions(c,ch){
   actions.push(control('Save','save','toggle:saves:'+c.id,{pressed:s.saves.includes(c.id)}));
   actions.push(control('Repost','repost','toggle:reposts:'+c.id,{pressed:s.reposts.includes(c.id)}));
   actions.push(control('Share','share','reelShare:'+c.id));
-  actions.push(control('Share on X','tweet','reelTweet:'+c.id));
   actions.push(control('Report','report','reelReport:'+c.id));
   return '<div class="reelRail" role="group" aria-label="Reel actions">'+actions.join('')+'</div>';
 }
@@ -281,7 +273,7 @@ function profile(id='me'){
     (items.length?'<div class="creatorGrid">'+items.slice().reverse().map(reel=>reelThumb(reel)).join('')+'</div>':'<p class="emptyView">No reels here yet.</p>')+'</section>';
 }
 const dockItems=[
-  ['Trading','Trade','M3 17l6-6 4 3 8-10 M15 4h6v6'],
+  ['Trading','Trade'],
   ['Search','Explore','M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0 M15 15l6 6'],
   ['Clips','Reels','M8 4l12 8-12 8z'],
   ['Inbox','Inbox','M3 5h18v13H3z M3 6l9 7 9-7'],
@@ -302,7 +294,8 @@ function render(){
   $('nav').innerHTML=dockItems.map(([route,label,icon])=>{
     if(route==='Clips'&&p==='Clips')return '<button type="button" class="dockItem center active" data-act="create"><span class="dockIcon" aria-hidden="true">＋</span>Create</button>';
     const active=route===p && (route!=='Profile'||!id||id==='me');
-    return '<a href="#'+route+'" class="dockItem '+(route==='Clips'?'center ':'')+(active?'active':'')+'" '+(active?'aria-current="page"':'')+'><span class="dockIcon"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="'+icon+'"/></svg></span>'+label+'</a>';
+    const symbol=route==='Trading'?tradeSymbol:'<svg aria-hidden="true" viewBox="0 0 24 24"><path d="'+icon+'"/></svg>';
+    return '<a href="#'+route+'" class="dockItem '+(route==='Clips'?'center ':'')+(active?'active':'')+'" '+(active?'aria-current="page"':'')+'><span class="dockIcon">'+symbol+'</span>'+label+'</a>';
   }).join('');
   $('main').innerHTML=({Login:loginScreen,Trending:trending,Search:search,Clips:feed,Trading:trade,Inbox:inbox,Profile:profile})[p](id);observe();paintWallet();
   if(p==='Login')window.pulseWallet.loginPage($('#walletLogin'),()=>go(id==='portfolio'?'Profile':id&&chan(id)?.coin?'Trading/'+id:'Clips'));
@@ -450,7 +443,6 @@ if(k==='commentLike'){
   comment.liked=!comment.liked;save();el.setAttribute('aria-pressed',String(comment.liked));return;
 }
 if(k==='reelReport')return reportReel(clip(v));
-if(k==='reelTweet')return shareToX(clip(v));
 if(k==='reelShare')return shareReel(clip(v));if(k==='reelTrade')return openReelTrade(clip(v));if(k==='explore'){
   if(v==='leaderboard')return go('Search/Leaderboard');
   exploreTab=v;return go('Search');
