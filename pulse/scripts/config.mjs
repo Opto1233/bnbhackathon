@@ -1,9 +1,30 @@
 import { existsSync, writeFileSync } from 'node:fs';
+
 if (existsSync('.env.local')) process.loadEnvFile('.env.local');
-const url = process.env.SUPABASE_URL || '';
-const key = process.env.SUPABASE_PUBLISHABLE_KEY || '';
-if (url || key) {
-  if (!/^https:\/\//.test(url) || !key.startsWith('sb_publishable_'))
-    throw Error('Set an HTTPS Supabase URL and an sb_publishable_ key in .env.local.');
+
+const teamSite = 'https://pulse-reels-studio.opto-touchaw-6470.chatgpt.site';
+const teamProject = 'https://jwghygpkxouawphpjosw.supabase.co';
+let url = process.env.SUPABASE_URL || '';
+let key = process.env.SUPABASE_PUBLISHABLE_KEY || '';
+const demo = process.env.PULSE_LOCAL_DEMO === '1';
+
+if (demo) {
+  url = '';
+  key = '';
+} else if (!url && !key) {
+  const response = await fetch(teamSite + '/pulse-config.js', {
+    redirect: 'error', signal: AbortSignal.timeout(15000)
+  });
+  if (!response.ok) throw Error('Could not load the team configuration from the deployed Pulse site.');
+  // Read the JSON assignment as data. Never execute the downloaded script.
+  const assignment = /^window\.PULSE_CONFIG\s*=\s*(\{[^]*\})\s*;\s*$/.exec(await response.text());
+  if (!assignment) throw Error('Invalid team configuration. Check the deployed Pulse site.');
+  ({ url, key } = JSON.parse(assignment[1]));
+  if (url !== teamProject) throw Error('The deployed configuration points to a different Supabase project.');
+}
+
+if (!demo && (typeof url !== 'string' || new URL(url).protocol !== 'https:' ||
+    typeof key !== 'string' || !/^sb_publishable_[A-Za-z0-9_-]+$/.test(key))) {
+  throw Error('Pulse needs an HTTPS Supabase URL and a publishable key.');
 }
 writeFileSync('dist/pulse-config.js', 'window.PULSE_CONFIG = ' + JSON.stringify({ url, key }) + ';\n');

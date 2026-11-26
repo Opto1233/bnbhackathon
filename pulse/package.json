@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "node scripts/test-market.mjs",
-    "build": "node scripts/build.mjs"
+    "build": "node scripts/build.mjs",
+    "start": "node scripts/config.mjs && python3 -m http.server 8499 --bind localhost --directory dist"
   },
   "keywords": [],
   "author": "",
