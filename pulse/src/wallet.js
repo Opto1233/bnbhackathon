@@ -1,3 +1,5 @@
+import { shared } from './shared.js';
+window.pulseShared = shared;
 import { BrowserProvider, JsonRpcProvider, Contract, getCreate2Address, id, keccak256, concat, formatEther, verifyMessage, hexlify, randomBytes } from 'ethers';
 import market from './market.json';
 const rpc='https://bsc-testnet-rpc.publicnode.com', explorer='https://testnet.bscscan.com';
@@ -12,7 +14,7 @@ window.addEventListener('eip6963:announceProvider',e=>wallets.set(e.detail.provi
 window.dispatchEvent(new Event('eip6963:requestProvider'));
 const node=(tag,text)=>Object.assign(document.createElement(tag),{textContent:text});
 const pretty=x=>formatEther(x).replace(/(\.\d{9})\d+$/,'$1');
-function clear(){account=null;sessionUntil=0;version++;refresh();}
+function clear(){shared?.logout();account=null;sessionUntil=0;version++;refresh();}
 function signed(){return account&&Date.now()<sessionUntil;}
 function use(provider){
   if(wallet!==provider){wallet?.removeListener?.('accountsChanged',clear);wallet?.removeListener?.('chainChanged',clear);wallet=provider;wallet.on?.('accountsChanged',clear);wallet.on?.('chainChanged',clear);}
@@ -28,6 +30,13 @@ async function login(provider){
   const msg=location.host+' wants you to sign in with your Ethereum account:\n'+addr+'\n\nSign in to trade Pulse creator coins on BSC Testnet.\n\nURI: '+location.origin+'\nVersion: 1\nChain ID: 97\nNonce: '+hexlify(randomBytes(16)).slice(2)+'\nIssued At: '+new Date().toISOString();
   const signature=await signer.signMessage(msg);
   if(verifyMessage(msg,signature)!==addr||BigInt(await provider.request({method:'eth_chainId'}))!==97n)throw Error('Wallet or network changed.');
+  if(shared){
+    await shared.login(msg,signature);
+    const current=await provider.request({method:'eth_accounts'});
+    if(current[0]?.toLowerCase()!==addr.toLowerCase()||BigInt(await provider.request({method:'eth_chainId'}))!==97n){
+      clear();throw Error('Wallet changed. Sign in again.');
+    }
+  }
   account=addr;sessionUntil=Date.now()+3600000;
 }
 async function signerNow(){
@@ -36,7 +45,7 @@ async function signerNow(){
 }
 async function ready(){const code=await reader.getCode(address);if(code==='0x')return false;if(code!==market.runtime)throw Error('Market bytecode mismatch.');return true;}
 function refresh(){window.dispatchEvent(new Event('pulse-wallet-change'));}
-const tokenId=c=>c.id==='me'?c.walletId:c.id;
+const tokenId=c=>c.walletId || (c.id==='me'?null:c.id);
 async function portfolio(root,creators){
   root.replaceChildren(node('h2','Your portfolio'));
   const body=node('div','');root.append(body);
@@ -123,7 +132,7 @@ async function marketSnapshot(creators){
 function panel(root,creator,side){
   const current=++version;
   const status=node('p',''),actions=node('div',''),info=node(root.id==='reelTicket'?'div':'p','');
-  const token=creator.id==='me'?creator.walletId:creator.id;
+  const token=tokenId(creator);
   root.replaceChildren(node('h2','$'+creator.coin),node('small','BSC Testnet · Chain 97'),info,actions,status);
   const chart=node('section','');chart.className='priceHistory';root.insertBefore(chart,info);priceHistory(chart,token);
   const faucet=node('a','Get test tBNB');faucet.href='https://docs.bnbchain.org/bnb-smart-chain/developers/faucet/';faucet.target='_blank';faucet.rel='noopener';root.append(faucet);
@@ -156,7 +165,7 @@ function panel(root,creator,side){
     if(!exists){status.textContent='One-time shared market deployment required. Your wallet pays testnet gas.';button('Deploy testnet market',async()=>{const signer=await signerNow();if(await reader.getCode(factory)!==proxyCode)throw Error('Deployment proxy mismatch.');if(await ready()){refresh();return;}await receipt(await signer.sendTransaction({to:factory,data:concat([salt,market.bytecode]),chainId:97}));});return;}
     let key=token||account;
     if(!await marketRead.listed(key)){
-      if(creator.id==='me'&&(!token||token===account))button('Launch wallet creator coin',async()=>{const contract=marketRead.connect(await signerNow());const owner=account;const tx=await contract.launch({chainId:97});await receipt(tx);window.dispatchEvent(new CustomEvent('pulse-creator-linked',{detail:owner}));});
+      if((creator.id==='me'||creator.id===shared?.userId)&&(!token||token.toLowerCase()===account.toLowerCase()))button('Launch wallet creator coin',async()=>{const contract=marketRead.connect(await signerNow());const owner=account;const tx=await contract.launch({chainId:97});await receipt(tx);window.dispatchEvent(new CustomEvent('pulse-creator-linked',{detail:owner}));});
       return;
     }
     if(!token&&creator.id==='me'){window.dispatchEvent(new CustomEvent('pulse-creator-linked',{detail:account}));return;}

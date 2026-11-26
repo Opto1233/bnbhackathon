@@ -1,3 +1,4 @@
+import "./config.mjs";
 import fs from 'node:fs';
 import solc from 'solc';
 import {build} from 'esbuild';
