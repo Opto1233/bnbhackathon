@@ -1,0 +1,9 @@
+import fs from 'node:fs';
+import solc from 'solc';
+import {build} from 'esbuild';
+const input={language:'Solidity',sources:{'Pulse.sol':{content:fs.readFileSync('contracts/Pulse.sol','utf8')}},settings:{evmVersion:'paris',optimizer:{enabled:true,runs:200},outputSelection:{'*':{'*':['abi','evm.bytecode.object','evm.deployedBytecode.object']}}}};
+const out=JSON.parse(solc.compile(JSON.stringify(input),{import:path=>({contents:fs.readFileSync('node_modules/'+path,'utf8')})}));
+for(const e of out.errors||[])if(e.severity==='error')throw Error(e.formattedMessage);
+const c=out.contracts['Pulse.sol'].Pulse;
+fs.writeFileSync('src/market.json',JSON.stringify({abi:c.abi,bytecode:'0x'+c.evm.bytecode.object,runtime:'0x'+c.evm.deployedBytecode.object}));
+await build({entryPoints:['src/wallet.js'],bundle:true,minify:true,outfile:'dist/wallet.js',target:'es2020'});
