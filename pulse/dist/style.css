@@ -342,3 +342,63 @@ main .link,main .guestLink{color:#d6fa44}
 .savedFrame,.photoPreview canvas{display:block;width:min(100%,350px);height:auto;border-radius:12px}
 .socialAvatar{position:relative;overflow:hidden}
 .formError{color:#ffafaf}
+
+.profileBio {
+  max-width: 60ch;
+  margin: 12px 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.profileLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 12px 0;
+  padding: 0;
+  list-style: none;
+}
+.profileLinks a { color: #d6fa44; font-size: 14px; text-underline-offset: 3px; }
+#profileDetailsForm fieldset { min-width: 0; border: 0; padding: 0; margin: 0 0 14px; }
+.profileLinkFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.profileLinkFields label { margin: 0; }
+#profileDetailsForm textarea, .profileLinkFields input {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+}
+#profileDetailsForm textarea {
+  background: #212124;
+  color: inherit;
+  border: 1px solid #39383c;
+  border-radius: 9px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+@media (max-width: 380px) {
+  .profileLinkFields { grid-template-columns: 1fr; }
+}
+
+.portfolioSummary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+}
+.portfolioChange {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.portfolioAssets { list-style: none; margin: 12px 0 0; padding: 0; }
+.portfolioAssets li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid #343438;
+  padding: 9px 0;
+}
+.portfolio .portfolioAssets a { margin: 0; }
+.portfolioAssets li > :last-child { font-variant-numeric: tabular-nums; }
+.portfolioNote { display: block; margin-top: 12px; }

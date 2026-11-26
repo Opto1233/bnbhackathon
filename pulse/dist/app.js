@@ -143,8 +143,13 @@ function exploreResults(){
   const hashtags=!q&&exploreTab==='all'?'<section class="exploreHashtags"><h2>Trending hashtags</h2><div>'+
     trendingHashtags().map(({name,reels})=>btn(esc(name)+'<small>'+reels+' '+(reels===1?'video':'videos')+'</small>','hashtag:'+esc(name),'hashtag')).join('')+'</div></section>':'';
   const activity=!q&&exploreTab==='all'?'<section class="demoActivity" aria-labelledby="activityHeading"><h2 id="activityHeading">Recent activity <span class="demoLabel">Demo</span></h2><div id="activityRows">'+activityRows()+'</div></section>':'';
+  const sharedPending=shared&&(sharedProfileStatus!=='ready'||loadedScope!==null);
+  let empty=q?'No results found.':'Nothing to explore here yet.';
+  if(sharedPending&&sharedProfileStatus==='failed')empty='Could not load shared results.';
+  else if(sharedPending)empty='Loading shared results…';
   return activity+hashtags+(visible.length ? visible.map(([,title,rows])=>'<section><h2>'+title+'</h2>'+rows.slice(0,exploreLimit).join('')+(rows.length>exploreLimit?btn('Show more '+title.toLowerCase(),'moreExplore','subtle'):'')+'</section>').join('')
-    : '<p class="emptyView">'+(q?'No results found.':'Nothing to explore here yet.')+'</p>');
+    : '<p class="emptyView" role="status">'+empty+'</p>'+
+      (sharedPending&&sharedProfileStatus==='failed'?btn('Retry','retrySharedProfile','subtle'):''));
 }
 function search(section){
   const showLeaderboard=section==='Leaderboard';
@@ -772,14 +777,8 @@ function trade(id){
     '<div class="layout"><section class="panel"><h2>'+esc(c.name)+'</h2>'+link('View profile','Profile/'+c.id)+'<p>Channel coin $'+esc(c.coin)+'</p></section><section class="panel chainPanel" id="chainPanel"></section></div>'+
     sampleTradeFeed('creator-'+c.id)+'<h2 class="sectionhead">Latest videos</h2>'+cards(newest(s.clips.filter(x=>x.owner===c.id)));
 }
-function momentHoldings(){
-  const markets=momentLedger().markets;
-  const rows=s.clips.flatMap(reel=>momentsFor(reel.id).filter(coin=>markets[coin.ledgerId||coin.id||reel.id]?.owned>0).map(coin=>
-    btn(esc(coin.name)+' · '+fmt(markets[coin.ledgerId||coin.id||reel.id].owned)+' coins',momentAction('tradeMoment',reel,coin),'subtle')));
-  return '<section class="panel"><h2>Demo Moment holdings</h2>'+(rows.join('')||'<p>No Moment Coins held.</p>')+'</section>';
-}
 function paintWallet(){
-  if($('#holdings'))window.pulseWallet.portfolio($('#holdings'),s.channels);
+  if($('#holdings'))window.pulseWallet.portfolio($('#holdings'),s.channels,marketDemoUsdRate);
   const sheet=$('#reelTicket');if(sheet&&$('dialog').open)window.pulseWallet.panel(sheet,chan(sheet.dataset.owner));
   const root=$('#chainPanel');if(root)window.pulseWallet.panel(root,chan(path()[1]));
 }
@@ -824,6 +823,34 @@ function ranks(){
 }
 function followedProfiles(){return [...new Set([...(s.profileFollows?.[myId()]||[]),...community.reactions.filter(r=>r.kind==='follow'&&r.actor===myId()).map(r=>r.target)])];}
 function newest(items){return items.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));}
+const profilePlatforms = [
+  ['tiktok', 'TikTok', ['tiktok.com']],
+  ['instagram', 'Instagram', ['instagram.com']],
+  ['youtube', 'YouTube', ['youtube.com', 'youtu.be']],
+  ['x', 'X', ['x.com', 'twitter.com']],
+  ['twitch', 'Twitch', ['twitch.tv']],
+  ['facebook', 'Facebook', ['facebook.com', 'fb.com']]
+];
+
+function profileLink(platform, value){
+  if(typeof value!=='string'||!value.trim()||value.length>500)return '';
+  let url;
+  try{url=new URL(value.trim());}catch{return '';}
+  if(url.protocol!=='https:'||url.username||url.password||url.port)return '';
+  return platform[2].some(domain=>url.hostname===domain||url.hostname.endsWith('.'+domain))&&url.href.length<=500
+    ? url.href : '';
+}
+
+function profileDetails(channel){
+  const bio=channel?.bio;
+  const links=profilePlatforms.flatMap(platform=>{
+    const url=profileLink(platform,channel?.socialLinks?.[platform[0]]);
+    return url?['<li><a href="'+esc(url)+'" target="_blank" rel="noopener noreferrer">'+platform[1]+' ↗</a></li>']:[];
+  });
+  return (bio?'<p class="profileBio">'+esc(bio)+'</p>':'')+
+    (links.length?'<ul class="profileLinks" aria-label="Social links">'+links.join('')+'</ul>':'');
+}
+
 function profile(id=myId()){
   if(id==='me')id=myId();
   const channel=chan(id), mine=id===myId();
@@ -850,8 +877,8 @@ function profile(id=myId()){
     link('Message','Inbox/'+id,'profileMessage')+'</div>';
   return '<section class="creatorProfile"><div class="creatorIntro"><div class="creatorDetails"><h1>'+esc(name)+'</h1>'+
     (handle?'<p>@'+esc(handle)+'</p>':'')+'<dl class="creatorStats">'+stats.map(([label,count])=>'<div><dt>'+label+'</dt><dd>'+fmt(count)+'</dd></div>').join('')+'</dl></div>'+profileAvatar(channel||{name},'creatorAvatar')+'</div>'+
-    social+(action||mine&&channel?'<div class="creatorActions">'+action+(mine&&channel?btn('Create video','create','')+btn('Edit profile photo','editPhoto',''):'')+'</div>':'')+
-    (mine?'<section class="panel portfolio" id="holdings"></section>'+momentHoldings():'')+
+    profileDetails(channel)+social+(action||mine&&channel?'<div class="creatorActions">'+action+(mine&&channel?btn('Create video','create','')+btn('Edit profile photo','editPhoto','')+btn('Edit bio and links','editProfileDetails',''):'')+'</div>':'')+
+    (mine?'<section class="panel portfolio" id="holdings"></section>':'')+
     (mine?viewTabs('Profile videos',[[0,'Posts'],[1,'Reposts'],[2,'Liked'],[3,'Saved']],tab,'tab'):'<h2 class="profilePosts">Posts</h2>')+
     (items.length?'<div class="creatorGrid">'+newest(items).map(reel=>reelThumb(reel)).join('')+'</div>':'<p class="emptyView">No videos here yet.</p>')+'</section>';
 }
@@ -1363,6 +1390,17 @@ if(k==='retrySharedProfile'&&shared)return loadShared();
 if(shared && ['channel','create','launch'].includes(k) && !window.pulseWallet.signed()){
   toast('Sign in with your wallet to publish.');return go('Login/'+k);
 }
+if(k==='editProfileDetails'){
+  const channel=self();
+  if(!channel)return;
+  const fields=profilePlatforms.map(([id,label])=>
+    '<label>'+label+'<input type="url" name="'+id+'" maxlength="500" placeholder="https://…" value="'+
+    esc(channel.socialLinks?.[id]||'')+'"></label>').join('');
+  return modal('<h2>Edit bio and links</h2><form id="profileDetailsForm" data-owner="'+esc(channel.id)+'">'+
+    '<label>Bio<textarea name="bio" rows="4" maxlength="240">'+esc(channel.bio||'')+'</textarea></label>'+
+    '<fieldset><legend>Social links</legend><div class="profileLinkFields">'+fields+'</div></fieldset>'+
+    '<button class="primary">Save profile</button></form>');
+}
 if(k==='editPhoto'){
   if(!self())return;
   modal('<h2>Edit profile photo</h2><form id="profilePhoto"><label>JPG, PNG or WebP · up to 10 MB<input type="file" name="photo" accept="image/jpeg,image/png,image/webp" required></label>'+
@@ -1496,7 +1534,7 @@ async function refreshShared(){
   try{feed=await (scope?shared.profile(scope):shared.feed());}
   catch(error){
     if(request!==sharedRead)return;
-    if(sharedProfileStatus!=='ready'){sharedProfileStatus='failed';render();}
+    if(sharedProfileStatus!=='ready'){sharedProfileStatus='failed';updateVisibleData();}
     throw error;
   }
   if(request!==sharedRead||scope!==profileScope())return;
@@ -1513,7 +1551,8 @@ async function refreshShared(){
   });
   sharedSignature=signature;
   s.channels=[...s.channels.filter(c=>!c.shared||(scope&&c.id!==scope)),...creators.map(c=>({
-    id:c.id,name:c.name,coin:c.ticker,walletId:c.wallet,shared:true,avatar:shared.avatar(c),followers:[],following:0
+    id:c.id,name:c.name,coin:c.ticker,walletId:c.wallet,shared:true,avatar:shared.avatar(c),followers:[],following:0,
+    bio:c.bio,socialLinks:c.social_links
   }))];
   s.clips=[...mapped,...s.clips.filter(c=>!c.shared||(scope&&c.owner!==scope))];
   if(changed)updateVisibleData();
@@ -1568,6 +1607,43 @@ async function saveProfilePhoto(form){
   finally{button.disabled=false;}
 }
 
+async function saveProfileDetails(form, data){
+  const channel=self(),button=form.querySelector('button');
+  if(button.disabled)return;
+  if(!channel||channel.id!==form.dataset.owner)return formError(form,'Wallet changed. Reopen your profile to edit it.');
+  form.querySelector('.formError')?.remove();
+  const bio=data.get('bio').trim(),socialLinks={};
+  if(bio.length>240)return formError(form,'Bio must be 240 characters or fewer.');
+  for(const platform of profilePlatforms){
+    const value=data.get(platform[0]).trim();
+    if(!value)continue;
+    const url=profileLink(platform,value);
+    if(!url)return formError(form,'Enter a valid HTTPS link for '+platform[1]+'.');
+    socialLinks[platform[0]]=url;
+  }
+  button.disabled=true;
+  try{
+    if(shared){
+      await shared.setProfileDetails(channel.id,bio,socialLinks);
+      if(self()?.id!==channel.id)throw Error('Wallet changed. Sign in again.');
+      ++sharedRead;
+    }
+    const current=self();
+    const previous={bio:current.bio,socialLinks:current.socialLinks};
+    Object.assign(current,{bio,socialLinks});
+    if(!shared){
+      try{save();}catch(error){Object.assign(current,previous);throw error;}
+    }
+    if(form.isConnected)$('dialog').close();
+    updateVisibleData();
+    if(shared)loadShared();
+    toast('Profile updated.');
+  }catch(error){
+    formError(form,error.code==='PGRST202'?'Shared profile editing is unavailable until the database is updated.':
+      error.message||'Could not save your profile. Please retry.');
+  }finally{button.disabled=false;}
+}
+
 async function readCaptions(form){
   const file=form.elements.captions?.files[0];
   if(!file)return null;
@@ -1608,7 +1684,7 @@ async function submitShared(form, data) {
   }finally{button.disabled=false;}
 }
 
-document.addEventListener('submit',async e=>{let f=e.target;if(!f.id)return;e.preventDefault();let d=new FormData(f);if(f.id==='profilePhoto')return saveProfilePhoto(f);if(shared && ['channel','launch','upload'].includes(f.id))return submitShared(f,d);if(['reelComment','reelReport','inboxMessage'].includes(f.id))return submitSocial(f,d);if(f.id==='channel'){let name=d.get('name').trim();if(!name)return formError(f,'Enter a channel name.');if(!self())s.channels.push({id:'me',name,followers:[[Date.now(),0]],following:0});save();if(f.dataset.next==='create')return create();go('Profile');}
+document.addEventListener('submit',async e=>{let f=e.target;if(!f.id)return;e.preventDefault();let d=new FormData(f);if(f.id==='profilePhoto')return saveProfilePhoto(f);if(f.id==='profileDetailsForm')return saveProfileDetails(f,d);if(shared && ['channel','launch','upload'].includes(f.id))return submitShared(f,d);if(['reelComment','reelReport','inboxMessage'].includes(f.id))return submitSocial(f,d);if(f.id==='channel'){let name=d.get('name').trim();if(!name)return formError(f,'Enter a channel name.');if(!self())s.channels.push({id:'me',name,followers:[[Date.now(),0]],following:0});save();if(f.dataset.next==='create')return create();go('Profile');}
 if(f.id==='launch'){let c=self(),symbol=d.get('symbol').toUpperCase();if(c.coin||s.channels.some(x=>x.coin===symbol))return formError(f,'This symbol is already taken.');Object.assign(c,{coin:symbol,supply:1000000,prices:[[Date.now(),1]]});toast('Coin symbol saved. Open the market to launch.');}
 if(f.id==='upload'){let file=d.get('video'),title=d.get('title').trim();if(!title||!file.type.startsWith('video/'))return formError(f,'Enter a title and choose a video.');f.querySelector('button').disabled=true;try{if(file.size>50*1024*1024||!['video/mp4','video/webm','video/quicktime'].includes(file.type))throw Error('Choose an MP4, WebM or MOV file up to 50 MiB.');
 const captions=await readCaptions(f);f.querySelector('.uploadStatus').textContent='Saving video…';

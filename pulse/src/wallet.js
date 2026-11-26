@@ -61,32 +61,155 @@ async function signerNow(){
 async function ready(contract=marketRead){if(contract===legacy)return true;const code=await reader.getCode(address);if(code==='0x')return false;if(code!==market.runtime)throw Error('Market bytecode mismatch.');return true;}
 function refresh(){window.dispatchEvent(new Event('pulse-wallet-change'));}
 const tokenId=c=>c.walletId || (c.id==='me'?null:c.id);
-async function portfolio(root,creators){
+async function portfolioDayStart(latest){
+  const midnight=new Date(latest.timestamp*1000);
+  midnight.setHours(0,0,0,0);
+  const target=midnight.getTime()/1000;
+  let high=latest.number,low=Math.max(0,high-131072);
+  let block=await reader.getBlock(low);
+  while(low>0&&block?.timestamp>target){
+    high=low;
+    low=Math.max(0,low-131072);
+    block=await reader.getBlock(low);
+  }
+  if(!block||block.timestamp>target)throw Error('Historical block unavailable');
+  while(high-low>1){
+    const middle=Math.floor((low+high)/2);
+    const block=await reader.getBlock(middle);
+    if(!block)throw Error('Historical block unavailable');
+    if(block.timestamp<=target)low=middle;
+    else high=middle;
+  }
+  return latest.timestamp===target?latest.number:low;
+}
+
+async function portfolioAssets(creators){
+  let remote=[], complete=true;
+  try{if(shared)remote=await shared.creators();}
+  catch{complete=false;}
+  const listed=new Map();
+  for(const c of [...creators,...remote.map(row=>({id:row.id,coin:row.ticker,walletId:row.wallet}))]){
+    const key=tokenId(c);
+    if(c.coin&&/^(?:[1-4]|0x[0-9a-f]{40})$/i.test(key??'')){
+      listed.set(String(key).toLowerCase(),{key,c});
+    }
+  }
+  const markets=await Promise.all([...listed.values()].map(async asset=>
+    ({...asset,contract:await marketFor(asset.key)})));
+  const groups=new Map();
+  for(const asset of markets){
+    const group=groups.get(asset.contract)||[];
+    group.push(asset);
+    groups.set(asset.contract,group);
+  }
+  const active=await Promise.all([...groups].map(async ([contract,assets])=>
+    await ready(contract)?{contract,assets}:null));
+  return {groups:active.filter(Boolean),complete};
+}
+
+async function portfolioAt(owner,groups,blockTag){
+  const options={blockTag};
+  const [cash,balances]=await Promise.all([
+    reader.getBalance(owner,blockTag),
+    Promise.all(groups.map(async ({contract,assets})=>{
+      const quantities=await contract.balanceOfBatch(assets.map(()=>owner),assets.map(asset=>asset.key),options);
+      return Promise.all(assets.flatMap(({key,c},index)=>quantities[index]>0n?[
+        contract.quote(key,quantities[index],false,options).then(value=>
+          ({label:'$'+c.coin,value,route:'#Trading/'+encodeURIComponent(c.id)}))
+      ]:[]));
+    }))
+  ]);
+  const rows=balances.flat();
+  if(cash>0n)rows.unshift({label:'Test BNB',value:cash});
+  return {rows,total:rows.reduce((sum,row)=>sum+row.value,0n)};
+}
+
+async function portfolio(root,creators,usdRate){
   root.replaceChildren(node('h2','Your portfolio'));
-  const body=node('div','');root.append(body);
-  if(!signed()){const sign=node('a','Sign in to see holdings');sign.href='#Login/portfolio';body.append(sign);return;}
+  const body=node('div','');
+  root.append(body);
+  if(!signed()){
+    const sign=node('a','Sign in to see holdings');
+    sign.href='#Login/portfolio';
+    body.append(sign);
+    return;
+  }
   const owner=account;
+  const isCurrent=()=>body.isConnected&&signed()&&owner===account;
+  const dollars=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:6});
+  const usd=value=>{
+    const amount=Number(value)/1e18*usdRate;
+    return amount>0&&amount<0.000001?'<$0.000001':dollars.format(amount);
+  };
   body.textContent='Loading holdings…';
+  let catalog,latest,current;
   try{
-    const blockTag=await reader.getBlockNumber(),options={blockTag};
-    const cash=await reader.getBalance(owner,blockTag);
-    const balances=await Promise.all(creators.filter(c=>tokenId(c)&&c.coin).map(async c=>{
-      const key=tokenId(c), contract=await marketFor(key);
-      if(!await ready(contract)) return null;
-      const qty=await contract.balanceOf(owner,key,options);
-      if(!qty)return null;
-      const supply=await contract.supply(key,options);
-      const [before,after]=await Promise.all([contract.reserve(supply,options),contract.reserve(supply-qty,options)]);
-      return {c,qty,value:before-after};
-    }));
-    const rows=balances.filter(Boolean);
-    if(!body.isConnected||owner!==account)return;
-    const total=rows.reduce((sum,r)=>sum+r.value,cash);
-    body.replaceChildren(node('strong',pretty(total)+' tBNB'),node('p','Wallet cash: '+pretty(cash)+' tBNB'));
-    if(!rows.length)body.append(node('small','No Pulse creator coins held.'));
-    else body.append(node('small','Holdings valued at their sell quote before gas.'));
-    for(const {c,qty,value} of rows){const row=node('a',qty+' $'+c.coin+' · '+pretty(value)+' tBNB');row.href='#Trading/'+encodeURIComponent(c.id);body.append(row);}
-  }catch{body.textContent='Unable to load wallet balances. ';const retry=node('button','Retry');retry.onclick=()=>portfolio(root,creators);body.append(retry);}
+    [catalog,latest]=await Promise.all([portfolioAssets(creators),reader.getBlock('latest')]);
+    if(!latest)throw Error('Latest block unavailable');
+    current=await portfolioAt(owner,catalog.groups,latest.number);
+  }catch{
+    if(!isCurrent())return;
+    body.textContent='Unable to load wallet balances. ';
+    const retry=node('button','Retry');
+    retry.onclick=()=>portfolio(root,creators,usdRate);
+    body.append(retry);
+    return;
+  }
+  if(!isCurrent())return;
+  const summary=node('div','');
+  summary.className='portfolioSummary';
+  const change=node('span','Today …');
+  change.className='portfolioChange';
+  change.setAttribute('role','status');
+  change.title='Change in portfolio value since midnight in your time zone';
+  summary.append(node('strong',usd(current.total)),change);
+  body.replaceChildren(summary);
+  if(current.rows.length){
+    const list=node('ul','');
+    list.className='portfolioAssets';
+    for(const {label,value,route} of current.rows){
+      const row=node('li',''),name=node(route?'a':'span',label);
+      if(route)name.href=route;
+      row.append(name,node('span',usd(value)));
+      list.append(row);
+    }
+    body.append(list);
+  }else if(catalog.complete)body.append(node('p','No assets held.'));
+  const note=node('small','BSC Testnet · 1 tBNB ≈ '+dollars.format(usdRate));
+  note.className='portfolioNote';
+  body.append(note);
+
+  if(!catalog.complete){
+    change.textContent='Today —';
+    change.title='Daily change is unavailable with partial holdings';
+    const status=node('p','Showing known assets. Could not load the full creator catalog. ');
+    const retry=node('button','Retry');
+    retry.onclick=()=>portfolio(root,creators,usdRate);
+    status.append(retry);
+    body.append(status);
+    return;
+  }
+  try{
+    const block=await portfolioDayStart(latest);
+    const active=await Promise.all(catalog.groups.map(async group=>
+      await reader.getCode(group.contract.target,block)!=='0x'?group:null));
+    const baseline=await portfolioAt(owner,active.filter(Boolean),block);
+    if(!isCurrent())return;
+    if(!baseline.total){
+      change.textContent='Today —';
+      change.title='No portfolio value at midnight to compare against';
+      return;
+    }
+    const movement=Number(current.total-baseline.total)/Number(baseline.total);
+    const percent=new Intl.NumberFormat('en-US',{style:'percent',maximumFractionDigits:2,signDisplay:'exceptZero'});
+    const formatted=percent.format(movement);
+    change.textContent='Today '+formatted;
+    if(formatted!==percent.format(0))change.classList.add(movement>0?'positive':'negative');
+  }catch{
+    if(!isCurrent())return;
+    change.textContent='Today —';
+    change.title='Historical portfolio value unavailable';
+  }
 }
 function drawPrices(root,values){
   const canvas=node('canvas','');canvas.width=640;canvas.height=160;canvas.style.width='100%';canvas.setAttribute('role','img');
