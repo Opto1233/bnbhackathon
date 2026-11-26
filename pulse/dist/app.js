@@ -35,7 +35,19 @@ function reelActions(c,ch){
   if(c.owner!=='me')actions.push(control('Link','↗','reelLink:'+c.id));
   return '<div class="reelRail" role="group" aria-label="Reel actions">'+actions.join('')+'</div>';
 }
-function feed(id){let idx=Math.max(0,s.clips.findIndex(c=>c.id===id)),items=[...s.clips.slice(idx),...s.clips.slice(0,idx)];return heading('Reels','Swipe up for the next reel')+'<div class="feed">'+items.map(c=>{let ch=chan(c.owner);return '<article class="reel" data-id="'+c.id+'"><video playsinline muted loop controls '+(c.owner==='me'?'src="'+(urls[c.id]||'')+'"':'poster="media/'+c.id+'.jpg" src="media/'+c.id+'.mp4"')+'></video>'+(c.owner===c.id?'<div class="memeCaption"><strong>'+esc(c.title)+'</strong><strong>'+esc(punchlines[Number(c.id)-1])+'</strong></div>':'')+'<div class="controls">'+link(esc(ch.name),'Profile/'+ch.id)+'<h3>'+esc(c.title)+'</h3></div>'+reelActions(c,ch)+'</article>';}).join('')+'</div>';}
+function feed(id){
+  const idx=Math.max(0,s.clips.findIndex(c=>c.id===id));
+  const items=[...s.clips.slice(idx),...s.clips.slice(0,idx)];
+  return '<div class="feed" aria-label="Reels">'+items.map(c=>{
+    const ch=chan(c.owner),seeded=c.owner===c.id;
+    const media=c.owner==='me'?'src="'+(urls[c.id]||'')+'"':'poster="media/'+c.id+'.jpg" src="media/'+c.id+'.mp4"';
+    const backdrop=seeded?' style="--reel-poster:url(media/'+c.id+'.jpg)"':'';
+    const caption=seeded?'<div class="memeCaption"><strong>'+esc(c.title)+'</strong><strong>'+esc(punchlines[Number(c.id)-1])+'</strong></div>':'';
+    const coin=ch.coin?link('$'+esc(ch.coin),'Trading/'+ch.id,'coinPill'):'';
+    return '<article class="reel" data-id="'+c.id+'"'+backdrop+'><video playsinline muted loop controls '+media+'></video>'+caption+
+      '<div class="controls"><div class="byline">'+link(esc(ch.name),'Profile/'+ch.id)+coin+'</div><h3>'+esc(c.title)+'</h3></div>'+reelActions(c,ch)+'</article>';
+  }).join('')+'</div>';
+}
 function observe(){observer?.disconnect();const root=$('.feed');if(!root)return;observer=new IntersectionObserver(entries=>entries.forEach(e=>{let v=e.target.querySelector('video');if(e.isIntersecting){v.play().catch(()=>{});let c=clip(e.target.dataset.id);c.views.push([Date.now(),last(c.views)+1]);save();}else v.pause();}),{root,threshold:.65});root.querySelectorAll('article').forEach(el=>observer.observe(el));}
 let marketGroup='all';
 function marketHome(){
@@ -77,6 +89,7 @@ function loginScreen(){
 function render(){
   let [p,id]=path();
   if(!pages.includes(p))p='Clips';
+  document.body.classList.toggle('reelsPage',p==='Clips');
   $('.accountLink').textContent=window.pulseWallet.signed()?'Wallet':'Sign in';
   $('nav').innerHTML=dockItems.map(([route,label,icon])=>{
     const active=route===p && (route!=='Profile'||!id||id==='me');
