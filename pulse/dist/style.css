@@ -296,3 +296,9 @@ code, pre, kbd, samp { font-family: Inter, sans-serif; }
 .profileSocialActions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:min(100%,360px);margin:14px 0}
 .profileSocialActions button{min-height:44px;border-radius:999px;padding:8px 14px;font-size:14px;font-weight:700}
 .profileSocialActions .profileMessage,.profileSocialActions .profileFollow[aria-pressed=true]{background:#212124;border-color:#39383c;color:#f7f6fa}
+
+.exploreProfileLink{display:flex;align-items:center;gap:10px;width:100%}
+.exploreProfileName{min-width:0}
+.exploreAvatar{position:relative;display:grid;place-items:center;flex:0 0 40px;width:40px;aspect-ratio:1;overflow:hidden;border-radius:50%;background:#2a3022 center/cover;color:#d6fa44;font-weight:800}
+.exploreAvatar video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;visibility:hidden}
+.exploreAvatar video.frameReady{visibility:visible}
