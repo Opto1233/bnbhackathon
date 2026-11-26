@@ -60,13 +60,12 @@ function reelActions(c,ch){
   }
   const actions=[];
   if(ch.coin){
-    actions.push(control('Buy','＋','reelTrade:buy:'+c.id,'tradeBuy'));
-    actions.push(control('Sell','−','reelTrade:sell:'+c.id,'tradeSell'));
+    actions.push(control('Trade','↔','reelTrade:'+c.id,'reelTrade'));
   }
   for(const [key,label,symbol] of [['likes','Like','♡'],['saves','Save','☆'],['reposts','Repost','↻']]){
     actions.push(control(label,symbol,'toggle:'+key+':'+c.id,'',s[key].includes(c.id)));
   }
-  if(c.owner!=='me')actions.push(control('Link','↗','reelLink:'+c.id));
+  actions.push(control('Share','↗','reelShare:'+c.id));
   return '<div class="reelRail" role="group" aria-label="Reel actions">'+actions.join('')+'</div>';
 }
 function feed(id){
@@ -79,6 +78,7 @@ function feed(id){
     const caption=seeded?'<div class="memeCaption"><strong>'+esc(c.title)+'</strong><strong>'+esc(punchlines[Number(c.id)-1])+'</strong></div>':'';
     const coin=ch.coin?link('$'+esc(ch.coin),'Trading/'+ch.id,'coinPill'):'';
     return '<article class="reel" data-id="'+c.id+'"'+backdrop+'><video playsinline muted loop controls '+media+'></video>'+caption+
+      '<button type="button" class="momentGesture" aria-label="Hold to create Moment Coin" title="Hold to create Moment Coin"></button>'+
       '<div class="controls"><div class="byline">'+link(esc(ch.name),'Profile/'+ch.id)+coin+'</div><h3>'+esc(c.title)+'</h3></div>'+reelActions(c,ch)+'</article>';
   }).join('')+'</div>';
 }
@@ -102,7 +102,7 @@ function trade(id){
 }
 function paintWallet(){
   if($('#holdings'))window.pulseWallet.portfolio($('#holdings'),s.channels);
-  const sheet=$('#reelTicket');if(sheet&&$('dialog').open)window.pulseWallet.panel(sheet,chan(sheet.dataset.owner),sheet.dataset.side);
+  const sheet=$('#reelTicket');if(sheet&&$('dialog').open)window.pulseWallet.panel(sheet,chan(sheet.dataset.owner));
   const root=$('#chainPanel');if(root)window.pulseWallet.panel(root,chan(path()[1]));
 }
 window.addEventListener('pulse-wallet-change',()=>{if(path()[0]==='Login'&&!window.pulseWallet.signed()&&$('#walletLogin button:disabled'))return;if($('#reelTicket')&&$('dialog').open){paintWallet();return;}render();});
@@ -177,6 +177,7 @@ function render(){
   document.body.classList.toggle('reelsPage',p==='Clips');
   $('.accountLink').textContent=window.pulseWallet.signed()?'Wallet':'Sign in';
   $('nav').innerHTML=dockItems.map(([route,label,icon])=>{
+    if(route==='Clips'&&p==='Clips')return '<button type="button" class="dockItem center active" data-act="create"><span class="dockIcon" aria-hidden="true">＋</span>Create</button>';
     const active=route===p && (route!=='Profile'||!id||id==='me');
     return '<a href="#'+route+'" class="dockItem '+(route==='Clips'?'center ':'')+(active?'active':'')+'" '+(active?'aria-current="page"':'')+'><span class="dockIcon"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="'+icon+'"/></svg></span>'+label+'</a>';
   }).join('');
@@ -184,14 +185,153 @@ function render(){
   if(p==='Login')window.pulseWallet.loginPage($('#walletLogin'),()=>go(id==='portfolio'?'Profile':id&&chan(id)?.coin?'Trading/'+id:'Clips'));
 }
 function modal(html){$('#form').innerHTML=html;if(!$('dialog').open)$('dialog').showModal();}
+function openReelTrade(reel){
+  const creator=chan(reel?.owner);
+  if(!creator?.coin)return;
+  modal('<div class="reelTradeHeading"><small>CREATOR MARKET</small><strong>'+esc(creator.name)+'</strong></div>'+
+    '<div id="reelTicket" class="chainPanel" data-owner="'+esc(creator.id)+'"></div>');
+  paintWallet();
+}
+async function shareReel(reel){
+  if(!reel)return;
+  const url=new URL(location.href);
+  url.hash='Clips/'+encodeURIComponent(reel.id);
+  try{
+    if(reel.owner==='me'){
+      const source=urls[reel.id];
+      if(source&&navigator.share&&navigator.canShare){
+        const blob=await (await fetch(source)).blob();
+        const extension=blob.type==='video/quicktime'?'mov':(blob.type.split('/')[1]||'mp4').split(';')[0];
+        const files=[new File([blob],reel.title+'.'+extension,{type:blob.type})];
+        if(navigator.canShare({files})){
+          await navigator.share({title:reel.title,files});return;
+        }
+      }
+      if(source){
+        const download=document.createElement('a');
+        download.href=source;download.download=reel.title;
+        download.click();
+        toast('Video downloaded. You can share the file.');
+      }else toast('This reel is only available in the browser that uploaded it.');
+      return;
+    }
+    if(navigator.share){
+      await navigator.share({title:reel.title,url:url.href});return;
+    }
+  }catch(error){if(error.name==='AbortError')return;}
+  if(reel.owner==='me')return toast('Unable to share this video.');
+  try{
+    await navigator.clipboard.writeText(url.href);toast('Reel link copied');
+  }catch{
+    modal('<label>Share reel<input readonly value="'+esc(url.href)+'"></label>');
+    $('#form input').select();
+  }
+}
+function momentTime(seconds){
+  return Math.floor(seconds/60)+':'+(seconds%60).toFixed(2).padStart(5,'0');
+}
+function openMoment(reel,source){
+  if(!reel||!source?.getAttribute('src'))return toast('This clip is unavailable.');
+  const existing=s.moments?.[reel.id];
+  const resume=!source.paused;
+  source.pause();
+  const start=existing?.time??source.currentTime;
+  modal('<section class="momentSheet"><h2>'+(existing?'Moment Coin':'Create Moment Coin')+'</h2>'+
+    '<p class="momentSource">'+esc(reel.title)+' · '+esc(chan(reel.owner).name)+'</p>'+
+    '<video class="momentPreview" muted playsinline preload="auto" src="'+esc(source.getAttribute('src'))+'" aria-label="Selected frame"></video>'+
+    (existing?'<h3>'+esc(existing.name)+'</h3><p>'+esc(existing.description)+'</p><p>Frame '+momentTime(existing.time)+'</p><small>Saved on this device · Demo</small>':
+      '<form id="momentLaunch"><label class="momentTimeline">Choose a frame <output></output><input type="range" min="0" step=".01" value="0" disabled></label>'+
+      '<label>Coin name<input name="name" maxlength="60" required></label>'+
+      '<label>Description<textarea name="description" maxlength="220" rows="2" required></textarea></label>'+
+      '<button type="submit" class="primary" disabled>Create demo coin</button><small>Saved on this device</small></form>')+
+    '<p class="momentStatus" role="status">Loading clip…</p></section>');
+  const dialog=$('dialog'), preview=$('.momentPreview'), form=$('#momentLaunch'), status=$('.momentStatus');
+  const track=form?.querySelector('input[type=range]'), submit=form?.querySelector('button');
+  function seek(){
+    const time=track?Number(track.value):Math.min(start,preview.duration);
+    if(track)form.querySelector('output').textContent=momentTime(time)+' / '+momentTime(preview.duration);
+    preview.currentTime=time;
+  }
+  preview.addEventListener('loadedmetadata',()=>{
+    if(!Number.isFinite(preview.duration)||preview.duration<=0){status.textContent='Unable to read this clip timeline.';return;}
+    if(track){
+      track.max=Math.floor(preview.duration*100)/100;
+      track.value=Math.min(Number(track.max),start).toFixed(2);
+      track.disabled=false;
+      track.oninput=seek;
+    }
+    seek();
+  });
+  const ready=()=>{
+    if(preview.readyState<2||preview.seeking||preview.error)return;
+    status.textContent='';if(submit)submit.disabled=false;
+  };
+  preview.addEventListener('loadeddata',ready);
+  preview.addEventListener('seeked',ready);
+  preview.addEventListener('seeking',()=>{if(submit)submit.disabled=true;});
+  preview.addEventListener('error',()=>{status.textContent='Unable to load this clip.';if(submit)submit.disabled=true;});
+  if(form)form.addEventListener('submit',event=>{
+    event.preventDefault();
+    event.stopPropagation();
+    if(submit.disabled)return;
+    const name=form.elements.name.value.trim(), description=form.elements.description.value.trim();
+    if(!name||!description){status.textContent='Enter a coin name and description.';return;}
+    const latest=JSON.parse(localStorage.getItem('pulse-demo-v1')||'null');
+    s.moments={...s.moments,...latest?.moments};
+    if(s.moments[reel.id]){
+      status.textContent='This reel already has a Moment Coin. Reopen the clip editor to see it.';return;
+    }
+    s.moments[reel.id]={name,description,time:Number(track.value),ownerId:reel.owner,clipId:reel.id};
+    try{save();}catch{delete s.moments[reel.id];status.textContent='Could not save this Moment Coin.';return;}
+    dialog.close();toast('Created '+name+' · Demo Moment Coin');
+  });
+  dialog.addEventListener('close',()=>{
+    if(resume&&source.isConnected)source.play().catch(()=>{});
+  },{once:true});
+}
+
+let momentHold;
+function cancelMomentHold(){
+  clearTimeout(momentHold?.timer);momentHold=null;
+}
+document.addEventListener('pointerdown',event=>{
+  const area=event.target.closest('.momentGesture');
+  if(!area||!event.isPrimary||event.button!==0)return;
+  cancelMomentHold();
+  const {pointerId,clientX,clientY}=event;
+  const reel=area.closest('.reel');
+  const timer=setTimeout(()=>{
+    if(!area.isConnected)return cancelMomentHold();
+    openMoment(clip(reel.dataset.id),reel.querySelector('video'));
+  },500);
+  momentHold={pointerId,clientX,clientY,timer};
+});
+document.addEventListener('pointermove',event=>{
+  if(momentHold?.pointerId===event.pointerId&&Math.hypot(event.clientX-momentHold.clientX,event.clientY-momentHold.clientY)>10)cancelMomentHold();
+});
+for(const type of ['pointerup','pointercancel'])document.addEventListener(type,event=>{
+  if(momentHold?.pointerId===event.pointerId)cancelMomentHold();
+});
+document.addEventListener('contextmenu',event=>{
+  if(event.target.closest('.momentGesture'))event.preventDefault();
+});
+
 function toast(msg){$('#notice').textContent=msg;clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>$('#notice').textContent='',3400);}
 function channelForm(next){modal('<h2>Create channel</h2><form id="channel" data-next="'+next+'"><label>Channel name<input name="name" required maxlength="48"></label><button class="primary">Create channel</button></form>');}
 function create(){if(!self())return channelForm('create');modal('<h2>Create reel</h2><form id="upload"><label>Reel title<input name="title" required maxlength="90"></label><label>Video file<input type="file" name="video" required accept="video/*"></label><button class="primary">Publish reel</button></form>');}
-function action(str,el){let [k,v,id]=str.split(':');if(k==='reelLink'){const url=new URL(location.href);url.hash='Clips/'+encodeURIComponent(v);navigator.clipboard.writeText(url.href).then(()=>toast('Reel link copied')).catch(()=>modal('<label>Reel link<input readonly value="'+esc(url.href)+'"></label>'));return;}if(k==='reelTrade'){const c=clip(id);if(!c)return;modal('<div id="reelTicket" class="chainPanel" data-side="'+v+'" data-owner="'+esc(c.owner)+'"></div>');paintWallet();return;}if(k==='explore'){exploreTab=v;return render();}if(k==='group'){marketGroup=v;return render();}
+function action(str,el){let [k,v,id]=str.split(':');if(k==='reelShare')return shareReel(clip(v));if(k==='reelTrade')return openReelTrade(clip(v));if(k==='explore'){exploreTab=v;return render();}if(k==='group'){marketGroup=v;return render();}
 
 if(k==='watch'){const list=s.watchlist||[];s.watchlist=list.includes(v)?list.filter(x=>x!==v):[...list,v];save();return render();}
 if(k==='create')return create();if(k==='channel')return channelForm('profile');if(k==='launch')return modal('<h2>Launch Channel coin</h2><p>Every reel on your channel will link to this coin.</p><form id="launch"><label>Coin symbol (2–8 letters, A–Z)<input required pattern="[A-Za-z]{2,8}" name="symbol"></label><p>Choose a symbol, then open the market to register your coin with your wallet on BSC Testnet.</p><button class="primary">Confirm launch</button></form>');if(k==='toggle'){s[v]=s[v].includes(id)?s[v].filter(x=>x!==id):[...s[v],id];save();el.classList.toggle('selected',s[v].includes(id));el.setAttribute('aria-pressed',String(s[v].includes(id)));return;}if(k==='category'){category=+v;metric=0;}if(k==='metric')metric=+v;if(k==='range')period=+v;if(k==='tab')tab=+v;if(k==='side')side=v;render();}
-document.addEventListener('click',e=>{let el=e.target.closest('[data-go],[data-act]');if(!el)return;if(el.dataset.go)go(el.dataset.go);else action(el.dataset.act,el);});
+document.addEventListener('click',e=>{
+  const center=e.target.closest('.momentGesture');
+  if(center){
+    const reel=center.closest('.reel'), video=reel.querySelector('video');
+    if(e.detail===0)openMoment(clip(reel.dataset.id),video);
+    else if(!$('dialog').open){if(video.paused)video.play().catch(()=>{});else video.pause();}
+    return;
+  }
+  let el=e.target.closest('[data-go],[data-act]');if(!el)return;if(el.dataset.go)go(el.dataset.go);else action(el.dataset.act,el);});
 document.addEventListener('change',e=>{if(e.target.id==='token')go('Trading/'+e.target.value);});
 document.addEventListener('input',e=>{if(e.target.id==='search'){query=e.target.value;$('#exploreResults').innerHTML=exploreResults();}});
 const dbReady=new Promise((resolve,reject)=>{let req=indexedDB.open('pulse-clips',1);req.onupgradeneeded=()=>req.result.createObjectStore('videos');req.onerror=()=>reject(req.error);req.onsuccess=()=>resolve(req.result);});

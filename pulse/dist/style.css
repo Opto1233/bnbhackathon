@@ -66,3 +66,29 @@ dialog[open]:has(#reelTicket){position:fixed;inset:0 max(8px,env(safe-area-inset
 .rankEntry .reelThumb span,.exploreRow .reelThumb span{display:none}
 .rankLoss{color:#ffa6a0}
 .emptyView{color:#b7baaf;padding:14px 0}
+
+.reelsPage header{display:none}
+.dock button.center{border:0;border-radius:0}
+.dock button.center .dockIcon{font-size:23px}
+.reelsPage .reelRail .reelTrade{background:#d6fa44;color:#19200e;border-color:#d6fa44;border-radius:12px;text-shadow:none}
+.reelsPage .reelRail .reelTrade span{font-size:23px;filter:none}
+.momentGesture{position:absolute;left:21%;right:21%;top:32%;bottom:32%;padding:0;border:0;background:transparent;touch-action:pan-y;user-select:none;-webkit-touch-callout:none}
+.momentGesture:focus-visible{outline:2px solid #d6fa44;outline-offset:4px}
+dialog[open]:has(#reelTicket,.momentSheet){position:fixed;inset:auto 0 0;margin:0 auto;box-sizing:border-box;width:min(100%,540px);height:auto;max-height:calc(100dvh - 24px);padding:26px 18px calc(18px + env(safe-area-inset-bottom));overflow:auto;border:1px solid #46483d;border-bottom:0;border-radius:22px 22px 0 0;background:#191b17;box-shadow:0 -12px 52px #0009}
+dialog:has(#reelTicket,.momentSheet)::backdrop{background:#060805a8}
+dialog:has(#reelTicket,.momentSheet)::before{position:absolute;inset:8px 0 auto;margin:auto;width:36px;height:4px;background:#777a6a;border-radius:4px;content:""}
+dialog:has(#reelTicket,.momentSheet) .close{z-index:2}
+.reelTradeHeading{display:grid;gap:3px;padding:0 46px 11px 0;margin-bottom:12px;border-bottom:1px solid #3b4034}
+.reelTradeHeading small{font-size:11px;letter-spacing:.09em;color:#d6fa44}
+.reelTradeHeading strong,.momentSheet h2{font-size:23px}
+#reelTicket .priceHistory{margin:14px 0}
+#reelTicket .tradeBuy,#reelTicket .tradeSell{width:calc(50% - 5px);min-height:44px;margin-right:5px}
+.momentSheet h2{margin:0 36px 0 0}
+.momentSource{color:#c2c6b8;margin:2px 0 12px;font-size:13px}
+.momentPreview{display:block;width:100%;height:min(33dvh,260px);object-fit:contain;background:#0d0f0b;border-radius:10px}
+.momentSheet label{display:block;margin:10px 0}
+.momentSheet output{float:right;color:#d6fa44;font-variant-numeric:tabular-nums}
+.momentSheet input[type=range]{display:block;width:100%;padding:0;min-height:36px;accent-color:#d6fa44}
+.momentSheet textarea{display:block;width:100%;margin-top:5px;padding:9px;color:inherit;background:#22251e;border:1px solid #515746;border-radius:8px;font:inherit;resize:vertical}
+.momentSheet form small{margin-left:8px;color:#c2c6b8}
+.momentStatus:empty{display:none}
