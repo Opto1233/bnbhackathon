@@ -271,6 +271,12 @@ function feed(id){
 }
 function observe(){observer?.disconnect();const root=$('.feed');if(!root)return;observer=new IntersectionObserver(entries=>entries.forEach(e=>{let v=e.target.querySelector('video');if(e.isIntersecting){v.play().catch(()=>{});let c=clip(e.target.dataset.id);c.views.push([Date.now(),last(c.views)+1]);save();}else v.pause();}),{root,threshold:.65});root.querySelectorAll('article').forEach(el=>observer.observe(el));}
 let marketGroup='all';
+const marketDemoUsdRate=600;
+const marketUsdFormatter=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:6});
+function marketUsd(amount){
+  const usd=Number(amount)*marketDemoUsdRate;
+  return usd>0&&usd<0.000001?'<span title="Less than one millionth of a dollar">&lt;$0.000001</span>':marketUsdFormatter.format(usd);
+}
 function marketBadge(label,value,explanation){
   return '<span class="marketBadge" title="'+esc(explanation)+'"><span>'+label+'</span> <b>'+value+'</b></span>';
 }
@@ -307,12 +313,11 @@ function marketStats({marketCap,holders,top10,fills,format}){
   const stat=(label,value)=>'<span class="marketStat"><small>'+label+'</small><b>'+value+'</b></span>';
   const volume=fills.reduce((sum,fill)=>sum+BigInt(fill.amount),0n);
   const buys=fills.filter(fill=>fill.side==='buy').length;
-  const bnb=value=>value.replace(/(\.\d*?[1-9])0+$/,'$1').replace(/\.0+$/,'')+' tBNB';
   const changeLabel=change===null?'':'<small class="'+tone+'" title="Fill price change from first to latest trade">'+
     (change>0?'+':'')+change.toFixed(2)+'%</small>';
   return '<div class="marketNumbers"><span class="marketSpark '+tone+'">'+chart+'</span>'+
-    '<div class="marketCap">'+stat('Market cap',bnb(marketCap))+changeLabel+'</div>'+
-    stat('Liquidity','<span title="No DEX pool">—</span>')+stat('Volume',bnb(format(volume)))+
+    '<div class="marketCap">'+stat('Market cap',marketUsd(marketCap))+changeLabel+'</div>'+
+    stat('Liquidity','<span title="No DEX pool">—</span>')+stat('Volume',marketUsd(format(volume)))+
     stat('TXNs',fmt(fills.length)+' <small><span class="positive" title="Buys">'+fmt(buys)+' B</span> / <span class="negative" title="Sells">'+fmt(fills.length-buys)+' S</span></small>')+
     '</div>'+marketAudit(holders,top10);
 }
@@ -346,7 +351,7 @@ function momentMarket(){
 function marketHome(){
   const visible=s.channels.filter(c=>c.coin&&(marketGroup==='all'||s.watchlist?.includes(c.id)));
   const moments=momentMarket();
-  return '<div class="marketHome"><div class="balanceBlock"><div><small>BSC TESTNET · CHAIN 97</small><h1>Creator coins</h1><p>Choose a creator coin to trade with tBNB.</p></div></div>'+
+  return '<div class="marketHome"><div class="balanceBlock"><div><small>BSC TESTNET · CHAIN 97</small><h1>Creator coins</h1><p>Market values use a demo rate of '+marketUsd(1)+' per tBNB.</p></div></div>'+
     '<h2>Creator market</h2><div class="marketTabs">'+[['all','All coins'],['saved','Watchlist']].map(([k,v])=>chip(v,'group:'+k,k===marketGroup)).join('')+'</div>'+
     (visible.length?'<p class="marketScope">Activity uses the last 1,000 BSC Testnet blocks. Market cap uses circulating coins. — means unavailable.</p>'+
       visible.map(c=>marketRow({
