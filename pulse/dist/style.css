@@ -167,9 +167,8 @@ dialog[open]:has(#reelTicket,#momentTicket,.commentsSheet){animation:pulseSheetU
 
 dialog[open]:has(#momentTicket){background:#151815;border-color:#424b38}
 .momentMarketHeader{display:flex;align-items:center;gap:9px;padding:0 34px 10px 0;border-bottom:1px solid #353c30}
-.momentMarketHeader strong{overflow-wrap:anywhere}
-.momentLauncherAvatar,.momentAssetArt{display:grid;place-items:center;flex:none;color:#d6fa44;background:#293721 center/cover;font-weight:750}
-.momentLauncherAvatar{width:32px;height:32px;border-radius:50%}
+.momentBack{display:grid;place-items:center;width:44px;height:44px;padding:0;color:inherit}
+.momentAssetArt{display:grid;place-items:center;flex:none;color:#d6fa44;background:#293721 center/cover;font-weight:750}
 .momentAsset{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:8px;padding:12px 0 6px}
 .momentAssetArt{width:42px;height:42px;border-radius:11px}
 .momentAssetMeta{min-width:0}
