@@ -1,6 +1,6 @@
 import { shared } from './shared.js';
 window.pulseShared = shared;
-import { BrowserProvider, JsonRpcProvider, FallbackProvider, Contract, getCreate2Address, id, keccak256, concat, formatEther, verifyMessage, hexlify, randomBytes } from 'ethers';
+import { BrowserProvider, JsonRpcProvider, FallbackProvider, Contract, getCreate2Address, id, keccak256, concat, formatEther, parseEther, verifyMessage, hexlify, randomBytes } from 'ethers';
 import market from './market.json';
 const rpc='https://bsc-testnet-rpc.publicnode.com', explorer='https://testnet.bscscan.com';
 const factory='0x4e59b44847b379578588920cA78FbF26c0B4956C';
@@ -62,7 +62,7 @@ async function ready(contract=marketRead){if(contract===legacy)return true;const
 function refresh(){window.dispatchEvent(new Event('pulse-wallet-change'));}
 const tokenId=c=>c.walletId || (c.id==='me'?null:c.id);
 async function portfolio(root,creators){
-  root.replaceChildren(node('h2','Your portfolio'));
+  root.replaceChildren(node('h3','BSC Testnet wallet'));
   const body=node('div','');root.append(body);
   if(!signed()){const sign=node('a','Sign in to see holdings');sign.href='#Login/portfolio';body.append(sign);return;}
   const owner=account;
@@ -88,65 +88,99 @@ async function portfolio(root,creators){
     for(const {c,qty,value} of rows){const row=node('a',qty+' $'+c.coin+' · '+pretty(value)+' tBNB');row.href='#Trading/'+encodeURIComponent(c.id);body.append(row);}
   }catch{body.textContent='Unable to load wallet balances. ';const retry=node('button','Retry');retry.onclick=()=>portfolio(root,creators);body.append(retry);}
 }
-function drawPrices(root,values){
+const creatorReserve=n=>1000000000000n*n+1000000000n*n*n;
+const creatorCap=n=>(creatorReserve(n+1n)-creatorReserve(n))*n;
+function budgetQuantity(supply,maximum,budget){
+  let low=0n,high=maximum;
+  const before=creatorReserve(supply);
+  while(low<high){
+    const quantity=(low+high+1n)/2n;
+    if(creatorReserve(supply+quantity)-before<=budget)low=quantity;
+    else high=quantity-1n;
+  }
+  return low;
+}
+function drawMarketCaps(root,fills,since,windowMs){
+  const values=fills.map(fill=>Number(fill.marketCap));
   const canvas=node('canvas','');canvas.width=640;canvas.height=160;canvas.style.width='100%';canvas.setAttribute('role','img');
-  canvas.setAttribute('aria-label','Trade prices from '+values[0]+' to '+values.at(-1)+' tBNB per coin');
-  const ctx=canvas.getContext('2d'),lo=Math.min(...values),hi=Math.max(...values);
+  canvas.setAttribute('aria-label','Market cap history in USD');
+  const ctx=canvas.getContext('2d');
+  if(!ctx)return;
+  const lo=Math.min(...values),hi=Math.max(...values);
   ctx.strokeStyle='#35373a';for(const y of [18,80,142]){ctx.beginPath();ctx.moveTo(4,y);ctx.lineTo(636,y);ctx.stroke();}
   ctx.strokeStyle='#d6fa44';ctx.lineWidth=4;ctx.beginPath();
-  values.forEach((v,i)=>{const x=8+i*624/Math.max(1,values.length-1),y=hi===lo?80:142-(v-lo)*124/(hi-lo);if(i)ctx.lineTo(x,y);else ctx.moveTo(x,y);if(values.length===1)ctx.arc(x,y,3,0,2*Math.PI);});ctx.stroke();root.append(canvas);
+  values.forEach((v,i)=>{const x=8+(fills[i].time-since)*624/windowMs,y=hi===lo?80:142-(v-lo)*124/(hi-lo);if(i)ctx.lineTo(x,y);else ctx.moveTo(x,y);if(values.length===1)ctx.arc(x,y,3,0,2*Math.PI);});ctx.stroke();root.append(canvas);
 }
-async function priceHistory(root,key){
-  root.replaceChildren(node('h3','Trade price'),node('small','Loading on-chain trades…'));
+async function marketCapHistory(root,creator,{range,windowMs},usd){
+  root.replaceChildren(node('h3','Market cap'),node('small','Loading on-chain trades…'));
   try{
-    const contract=await marketFor(key), exists=await ready(contract);
-    let logs=[];
-    if(exists&&key){const end=await reader.getBlockNumber();logs=await contract.queryFilter(contract.filters.Trade(key),Math.max(0,end-999),end);}
-    root.replaceChildren(node('h3','Trade price'));
-    if(!logs.length){
-      root.append(node('p',exists?'No trades in the last 1,000 blocks.':'No trades yet. The testnet market has not launched.'));
-      if(key){
-        const start=exists?await contract.supply(key):0n;
-        root.append(node('h4','Projected buy price'));
-        // One-unit buy quote from Pulse.reserve(n + 1) - Pulse.reserve(n).
-        const previews=[0,25,50,75,100].map(n=>Number(formatEther(1000000000000n+1000000000n*(2n*(start+BigInt(n))+1n))));
-        drawPrices(root,previews);
-        root.querySelector('canvas').setAttribute('aria-label','Projected unit buy price over the next hundred coins issued.');
-        root.append(node('small','Next 100 coins issued · '+previews[0]+' to '+previews.at(-1)+' tBNB'));
-      }
-      return;
-    }
-    const values=logs.map(e=>Number(formatEther(e.args.amount/e.args.quantity)));
-    drawPrices(root,values);root.append(node('small','Latest: '+values.at(-1)+' tBNB per coin · trades in the last 1,000 blocks'));
-  }catch{root.replaceChildren(node('h3','Trade price'),node('p','Price history is unavailable.'));const retry=node('button','Retry chart');retry.onclick=()=>priceHistory(root,key);root.append(retry);}
+    const data=(await marketSnapshot([creator])).get(creator.id);
+    if(!data)throw Error('Market cap history is unavailable.');
+    if(data.status){root.replaceChildren(node('h3','Market cap'),node('p',data.status));return;}
+    const since=data.asOf-windowMs;
+    const fills=data.fills.filter(fill=>fill.time>=since&&fill.time<=data.asOf);
+    const partial=data.historyStart>since;
+    root.replaceChildren(node('h3','Market cap'),node('strong',usd(data.marketCap)),
+      node('p','BSC Testnet · '+range+(partial?' · Partial window':'')+' · Demo USD rate'));
+    if(fills.length){
+      drawMarketCaps(root,fills,since,windowMs);
+      root.append(node('small','First fill '+usd(fills[0].marketCap)+' · Latest fill '+usd(fills.at(-1).marketCap)));
+    }else root.append(node('small',partial?'No trades in the available history.':'No trades in this window.'));
+  }catch{root.replaceChildren(node('h3','Market cap'),node('p','Market cap history is unavailable.'));const retry=node('button','Retry chart');retry.onclick=()=>marketCapHistory(root,creator,{range,windowMs},usd);root.append(retry);}
 }
 async function marketSnapshot(creators){
   const rows=new Map();
   const blockTag=await reader.getBlockNumber();
+  const firstBlock=Math.max(0,blockTag-999);
+  const timestamps=new Map();
+  function blockTime(number){
+    if(!timestamps.has(number)){
+      timestamps.set(number,reader.getBlock(number).then(block=>{
+        if(!block)throw Error('Trade block is unavailable');
+        return block.timestamp*1000;
+      }));
+    }
+    return timestamps.get(number);
+  }
   await Promise.allSettled(creators.map(async creator=>{
     const key=tokenId(creator),contract=await marketFor(key),listedMarket=await ready(contract);
     if(!listedMarket||!key||!await contract.listed(key,{blockTag})){
       rows.set(creator.id,{status:'Market not launched'});
       return;
     }
-    const [supply,logs]=await Promise.all([
-      contract.supply(key,{blockTag}),contract.queryFilter(contract.filters.Trade(key),Math.max(0,blockTag-999),blockTag)
+    const [supply,logs,historyStart,asOf]=await Promise.all([
+      contract.supply(key,{blockTag}),contract.queryFilter(contract.filters.Trade(key),firstBlock,blockTag),
+      blockTime(firstBlock),blockTime(blockTag)
     ]);
-    const reserves=await Promise.all([contract.reserve(supply+1n,{blockTag}),contract.reserve(supply,{blockTag})]);
-    const price=reserves[0]-reserves[1];
-    const fills=logs.filter(log=>log.args.id===BigInt(key)).map(({args})=>({
-      side:args.bought?'buy':'sell', amount:args.amount, quantity:args.quantity
-    }));
-    rows.set(creator.id,{marketCap:formatEther(price*supply),holders:supply<=1n?Number(supply):null,top10:supply>0n&&supply<=10n?'100%':null,fills,format:formatEther});
+    const events=logs.filter(log=>log.args.id===BigInt(key))
+      .sort((a,b)=>a.blockNumber-b.blockNumber||a.index-b.index);
+    // Busy markets may contain many fills. Share requests across coins and fetch timestamps in batches.
+    const blocks=[...new Set(events.map(event=>event.blockNumber))];
+    for(let start=0;start<blocks.length;start+=12){
+      await Promise.all(blocks.slice(start,start+12).map(blockTime));
+    }
+    let circulating=supply;
+    const fills=(await Promise.all(events.reverse().map(async ({args,blockNumber})=>{
+      const marketCap=formatEther(creatorCap(circulating));
+      circulating+=args.bought?-args.quantity:args.quantity;
+      return {side:args.bought?'buy':'sell',amount:args.amount,quantity:args.quantity,marketCap,time:await blockTime(blockNumber)};
+    }))).reverse();
+    rows.set(creator.id,{marketCap:formatEther(creatorCap(supply)),holders:supply<=1n?Number(supply):null,
+      top10:supply>0n&&supply<=10n?'100%':null,fills,historyStart,asOf,format:formatEther});
   }));
   return rows;
 }
-function panel(root,creator,side){
+function panel(root,creator,chartOptions){
   const current=++version;
+  const usdFormatter=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:6});
+  const usd=value=>{
+    const converted=Number(value)*chartOptions.toUsd;
+    return converted>0&&converted<0.000001?'<$0.000001':usdFormatter.format(converted);
+  };
   const status=node('p',''),actions=node('div',''),info=node(root.id==='reelTicket'?'div':'p','');
   const token=tokenId(creator);
   root.replaceChildren(node('h2','$'+creator.coin),node('small','BSC Testnet · Chain 97'),info,actions,status);
-  const chart=node('section','');chart.className='priceHistory';root.insertBefore(chart,info);priceHistory(chart,token);
+  const chart=node('section','');chart.className='priceHistory';root.insertBefore(chart,info);marketCapHistory(chart,creator,chartOptions,usd);
   const faucet=node('a','Get test tBNB');faucet.href='https://docs.bnbchain.org/bnb-smart-chain/developers/faucet/';faucet.target='_blank';faucet.rel='noopener';root.append(faucet);
   const txKey='pulse:lastTx:97:'+account+':'+creator.id;
   const lastTx=sessionStorage.getItem(txKey);if(/^0x[0-9a-f]{64}$/i.test(lastTx||'')){const receipt=node('a','Latest transaction ↗');receipt.href=explorer+'/tx/'+lastTx;receipt.target='_blank';receipt.rel='noopener';root.append(receipt);}
@@ -184,24 +218,39 @@ function panel(root,creator,side){
       return;
     }
     if(!token&&creator.id==='me'){window.dispatchEvent(new CustomEvent('pulse-creator-linked',{detail:account}));return;}
-    const owned=await selected.balanceOf(account,key),nSold=await selected.supply(key),unit=(await selected.reserve(nSold+1n))-(await selected.reserve(nSold));
+    const owned=await selected.balanceOf(account,key);
     if(current!==version||!root.isConnected)return;
     info.append(node('small',selected===legacy?'Legacy demo market · uncapped supply':'Demo supply cap · 1,000,000 coins'));
-    if(sheet){
-      sheetStat('Your coins',owned+' $'+creator.coin);
-      const price=node('div','');
-      price.className='creatorUnitPrice';
-      price.append(node('strong',pretty(unit)),node('small','tBNB per coin'));
-      chart.before(price);
-    }else{
-      info.textContent+=' · '+owned+' $'+creator.coin;
-      actions.append(node('p','Next coin · '+pretty(unit)+' tBNB'));
+    if(sheet)sheetStat('Your coins',owned+' $'+creator.coin);
+    else info.textContent+=' · '+owned+' $'+creator.coin;
+    const budget=node('input',''),percent=node('input','');
+    Object.assign(budget,{type:'number',min:'0.000000000000000001',step:'any',value:'0.05',required:true});
+    Object.assign(percent,{type:'number',min:'1',max:'100',step:'1',value:'100',required:true});
+    for(const [label,input] of [['Buy budget (tBNB)',budget],['Sell (% of holdings)',percent]]){
+      const field=node('label',label);field.append(input);actions.append(field);
     }
-    const qty=node('input','');Object.assign(qty,{type:'number',min:'1',max:'1000000',step:'1',value:'1'});const label=node('label','Creator coins');label.append(qty);actions.append(label);
-    for(const buy of (side?[side==='buy']:[true,false]))button(buy?'Buy':'Sell',async()=>{
-      if(!qty.reportValidity()||!qty.value)return;const n=BigInt(qty.value);if(!buy&&n>owned)throw Error('Insufficient creator coins.');
-      const amount=await selected.quote(key,n,buy);actions.replaceChildren(node('p',(buy?'Buy ':'Sell ')+n+' $'+creator.coin+' · '+pretty(amount)+' tBNB + network gas'));
-      button('Confirm in wallet',async()=>{const c=selected.connect(await signerNow());const tx=buy?await c.buy(key,n,{value:amount,chainId:97}):await c.sell(key,n,amount,{chainId:97});await receipt(tx);});
+    for(const buy of [true,false])button(buy?'Preview buy':'Preview sell',async()=>{
+      const input=buy?budget:percent;
+      if(!input.reportValidity())return;
+      const blockTag=await reader.getBlockNumber(),options={blockTag};
+      const supply=await selected.supply(key,options);
+      const maximum=1000000n;
+      const limit=selected===legacy?maximum:maximum-supply;
+      const holdings=buy?0n:await selected.balanceOf(account,key,options);
+      const n=buy?budgetQuantity(supply,limit,parseEther(input.value)):holdings*BigInt(input.value)/100n;
+      if(!n)throw Error(buy?'Your budget is below the minimum buy amount, or the curve is full.':'This percentage is below one coin.');
+      if(!buy&&n>maximum)throw Error('Choose a smaller percentage. The testnet market allows up to 1,000,000 coins per trade.');
+      const amount=await selected.quote(key,n,buy,options);
+      if(current!==version||!root.isConnected)return;
+      const nextSupply=supply+(buy?n:-n);
+      actions.replaceChildren(node('p','Market cap '+usd(formatEther(creatorCap(supply)))+' → '+usd(formatEther(creatorCap(nextSupply)))),
+        node('p',(buy?'Pay ':'Receive ')+formatEther(amount)+' tBNB · '+n+' $'+creator.coin+' · plus network gas'));
+      button('Confirm in wallet',async()=>{
+        const c=selected.connect(await signerNow());
+        if(await c.supply(key)!==supply)throw Error('Market cap changed. Preview again.');
+        const tx=buy?await c.buy(key,n,{value:amount,chainId:97}):await c.sell(key,n,amount,{chainId:97});
+        await receipt(tx);
+      });
       button('Back',async()=>refresh());status.textContent='';
     }).className=buy?'tradeBuy':'tradeSell';
   })().catch(e=>{status.textContent='Could not load testnet market: '+(e.shortMessage||e.message);button('Retry',async()=>refresh());});

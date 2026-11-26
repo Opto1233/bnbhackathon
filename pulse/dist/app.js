@@ -44,6 +44,7 @@ const demoShorts=[
   ['myth','Pulse Lore','The trickster','#MythologyEdit','#NorseLore'],
   ['bot','Pulse Workshop','Tiny bot, big plans','#LittleBot','#Robotics']
 ];
+const pausedReelIds=new Set(['reaction','kimchi','bot']);
 const classicHashtags=[['#StreetLife','#CityNights'],['#Surfing','#Outdoors'],['#DJSet','#Music'],['#Cooking','#Food']];
 for(const [index,[id,name,title,...hashtags]] of demoShorts.entries()){
   if(!s.channels.some(channel=>channel.id===id))s.channels.push({id,name,followers:[],following:0});
@@ -58,6 +59,7 @@ function reelHashtags(reel){
 function trendingHashtags(){
   const since=Date.now()-day, tags=new Map();
   for(const reel of s.clips){
+    if(pausedReelIds.has(reel.id))continue;
     const unique=new Map(reelHashtags(reel).map(name=>[name.toLowerCase(),name]));
     for(const [tag,name] of unique){
       const item=tags.get(tag)||{name,views:0,reels:0};
@@ -129,10 +131,34 @@ function exploreProfileLink(channel,title,subtitle,route){
     (subtitle?'<small>'+esc(subtitle)+'</small>':'')+'</span>',route,'exploreTitle exploreProfileLink')+'</div>';
 }
 let exploreTab='all', exploreLimit=24;
+function trendingCreators(){
+  const gains=new Map(),since=Date.now()-day;
+  for(const reel of s.clips){
+    if(pausedReelIds.has(reel.id))continue;
+    const views=stats(reel.views,since).delta;
+    if(views>0)gains.set(reel.owner,(gains.get(reel.owner)||0)+views);
+  }
+  const top=[...gains].filter(([id])=>chan(id)).sort((a,b)=>b[1]-a[1]).slice(0,3);
+  if(!top.length)return '';
+  return '<section class="trendingCreators"><h2>Trending Creators</h2>'+top.map(([id,gain])=>{
+    const creator=chan(id);
+    return exploreProfileLink(creator,creator.name,'+'+fmt(gain)+' views · 24h','Profile/'+id);
+  }).join('')+'</section>';
+}
 function exploreResults(){
   const q=query.trim().toLowerCase(), matches=(...values)=>values.some(value=>String(value||'').toLowerCase().includes(q));
+  if(exploreTab==='following'){
+    const following=new Set(followedProfiles());
+    const people=s.channels.filter(c=>following.has(c.id)&&matches(c.name,'@'+handleFor(c),c.coin));
+    const videos=newest(s.clips.filter(c=>following.has(c.owner)&&!pausedReelIds.has(c.id)&&matches(c.title,chan(c.owner)?.name,...reelHashtags(c))));
+    if(!following.size)return '<p class="emptyView">Follow creators to see their videos here.</p>'+btn('Find creators','explore:channels','subtle');
+    if(!people.length&&!videos.length)return '<p class="emptyView">'+(q?'No matching creators or videos.':'No videos from followed creators yet.')+'</p>';
+    return (people.length?'<section><h2>Creators you follow</h2>'+people.slice(0,exploreLimit).map(c=>exploreProfileLink(c,c.name,fmt(followerTotal(c))+' followers','Profile/'+c.id)).join('')+'</section>':'')+
+      '<section><h2>Latest videos</h2>'+cards(videos.slice(0,exploreLimit))+'</section>'+
+      (Math.max(people.length,videos.length)>exploreLimit?btn('Show more','moreExplore','subtle'):'');
+  }
   const show=id=>exploreTab==='all'||exploreTab===id;
-  const reels=!show('reels')?[]:s.clips.filter(c=>matches(c.title,chan(c.owner)?.name,chan(c.owner)?.coin? '$'+chan(c.owner).coin : '',...reelHashtags(c)))
+  const reels=!show('reels')?[]:s.clips.filter(c=>!pausedReelIds.has(c.id)&&matches(c.title,chan(c.owner)?.name,chan(c.owner)?.coin? '$'+chan(c.owner).coin : '',...reelHashtags(c)))
     .sort((a,b)=>stats(b.views,Date.now()-day).delta-stats(a.views,Date.now()-day).delta);
   const channels=exploreTab==='reels'?[]:s.channels.filter(c=>matches(c.name,'@'+handleFor(c),c.coin&&'$'+c.coin));
   const groups=[
@@ -149,14 +175,14 @@ function exploreResults(){
   const visible=groups.filter(([id,,rows])=>rows.length&&(exploreTab==='all'||exploreTab===id));
   const hashtags=!q&&exploreTab==='all'?'<section class="exploreHashtags"><h2>Trending hashtags</h2><div>'+
     trendingHashtags().map(({name,reels})=>btn(esc(name)+'<small>'+reels+' '+(reels===1?'video':'videos')+'</small>','hashtag:'+esc(name),'hashtag')).join('')+'</div></section>':'';
-  const activity=!q&&exploreTab==='all'?'<section class="demoActivity" aria-labelledby="activityHeading"><h2 id="activityHeading">Recent activity <span class="demoLabel">Demo</span></h2><div id="activityRows">'+activityRows()+'</div></section>':'';
-  return activity+hashtags+(visible.length ? visible.map(([,title,rows])=>'<section><h2>'+title+'</h2>'+rows.slice(0,exploreLimit).join('')+(rows.length>exploreLimit?btn('Show more '+title.toLowerCase(),'moreExplore','subtle'):'')+'</section>').join('')
+  const creators=!q&&exploreTab==='all'?trendingCreators():'';
+  return creators+hashtags+(visible.length ? visible.map(([,title,rows])=>'<section><h2>'+title+'</h2>'+rows.slice(0,exploreLimit).join('')+(rows.length>exploreLimit?btn('Show more '+title.toLowerCase(),'moreExplore','subtle'):'')+'</section>').join('')
     : '<p class="emptyView">'+(q?'No results found.':'Nothing to explore here yet.')+'</p>');
 }
 function search(section){
   const showLeaderboard=section==='Leaderboard';
   const tabs=viewTabs('Explore categories',[
-    ['all','For you'],['reels','Videos'],['channels','Channels'],['traders','Traders'],['coins','Coins'],['leaderboard','Leaderboard']
+    ['all','For you'],['following','Following'],['reels','Videos'],['channels','Channels'],['traders','Traders'],['coins','Coins'],['leaderboard','Leaderboard']
   ],showLeaderboard?'leaderboard':exploreTab,'explore');
   const content=showLeaderboard?ranks():
     '<label class="exploreField"><span aria-hidden="true">⌕</span><input id="search" type="search" aria-label="Search Pulse" placeholder="Search videos, hashtags, channels, or coins" value="'+esc(query)+'"></label>'+
@@ -227,31 +253,15 @@ function reelLikeCount(reel){
   return (demoShortLikes[reel.id]??reel.likes)+community.reactions.filter(r=>r.kind==='like'&&r.target===reel.id).length+Number(s.likes.includes(reel.id));
 }
 const shortNumber=new Intl.NumberFormat('en-US',{notation:'compact',maximumFractionDigits:1});
-function recentDemoComments(){
-  return demoConversation.filter(row=>row.offset<=demoElapsed);
-}
 function demoReel(id){return demoConversation.some(row=>row.reel===id);}
 function minutesAgo(time){
   const seconds=Math.max(0,Math.floor((Date.now()-time)/1000));
   return seconds<60?'Just now':seconds<3600?Math.floor(seconds/60)+'m ago':Math.floor(seconds/3600)+'h ago';
 }
-function activityRows(){
-  const launches=Object.entries(demoMoments).filter(([reel,moment])=>momentFor(reel)?.offset===moment.offset).map(([reel,moment])=>({
-    reel,author:moment.launcher,text:moment.name,time:demoStartedAt+moment.offset*1000,launch:true
-  }));
-  const events=[...recentDemoComments(),...launches].sort((a,b)=>b.time-a.time).slice(0,3);
-  return events.map(({reel,author,text,time,launch})=>{
-    const item=clip(reel);
-    const action=launch?' created a Moment Coin from ':' commented on ';
-    return item?link('<span class="socialAvatar">'+esc(author[0])+'</span><span class="activityCopy"><strong>'+esc(author)+'</strong>'+action+'<b>'+esc(item.title)+'</b><small>'+esc(text)+'</small></span><time datetime="'+new Date(time).toISOString()+'">'+minutesAgo(time)+'</time>','Clips/'+reel,'activityRow'):'';
-  }).join('');
-}
 function tickDemoActivity(){
   if(document.hidden)return;
   demoElapsed++;
   if(!demoConversation.some(row=>row.offset===demoElapsed))return;
-  const activity=$('#activityRows');
-  if(activity&&!activity.contains(document.activeElement))activity.innerHTML=activityRows();
   for(const {reel} of demoConversation.filter(row=>row.offset===demoElapsed))updateCommentCount(reel);
 }
 const demoTimer=setInterval(()=>{
@@ -430,10 +440,14 @@ function reelActions(c){
   actions.push(control('Report','report','reelReport:'+c.id));
   return '<div class="reelRail" role="group" aria-label="Video actions">'+actions.join('')+'</div>';
 }
+function feedItems(id){
+  return s.clips.filter(reel=>reel.id===id||!pausedReelIds.has(reel.id));
+}
 function feed(id){
   if(id&&!clip(id))return missingResource('video','Clips');
-  const idx=Math.max(0,s.clips.findIndex(c=>c.id===id));
-  const items=[...s.clips.slice(idx),...s.clips.slice(0,idx)];
+  const visible=feedItems(id);
+  const idx=Math.max(0,visible.findIndex(c=>c.id===id));
+  const items=[...visible.slice(idx),...visible.slice(0,idx)];
   return '<div class="feed" aria-label="Video feed">'+items.map(c=>{
     const ch=chan(c.owner),seeded=Boolean(punchlines[Number(c.id)-1])&&c.owner===c.id;
     const media=c.media?'crossorigin="anonymous" src="'+esc(c.media)+'"':c.owner==='me'?'src="'+(urls[c.id]||'')+'"':'poster="media/'+c.id+'.jpg" src="media/'+c.id+'.mp4"';
@@ -443,11 +457,18 @@ function feed(id){
     const coin=ch.coin?link('$'+esc(ch.coin),'Trading/'+ch.id,'coinPill'):'';
     return '<article class="reel" data-id="'+c.id+'"'+backdrop+'><template class="reelMedia"><video playsinline muted controls preload="metadata" '+media+'></video></template>'+caption+
       '<button type="button" class="momentGesture" aria-label="Hold to create Moment Coin" title="Hold to create Moment Coin"></button>'+
+      '<button type="button" class="reelSound" data-act="reelSound:'+esc(c.id)+'" aria-label="Video sound" aria-pressed="false">Sound off</button>'+
       '<div class="controls"><div class="byline">'+link(esc(ch.name),'Profile/'+ch.id)+coin+momentBadge(c)+'</div><h3>'+esc(c.title)+'</h3>'+(demoReel(c.id)?'<span class="demoLabel">Demo activity</span>':'')+(hashtags?'<div class="reelHashtags">'+hashtags+'</div>':'')+'</div>'+reelActions(c)+'</article>';
   }).join('')+'</div>';
 }
 const reelVisibility=.65;
-let activeReelWatch, feedRoute;
+let activeReelWatch, feedRoute, reelAudioEnabled=false;
+function updateSoundButton(article,video){
+  const button=article.querySelector('.reelSound');
+  const audible=!video.muted&&video.volume>0;
+  button.setAttribute('aria-pressed',String(audible));
+  button.textContent=audible?'Sound on':'Sound off';
+}
 function applySharedViews(views,count,authoritative=false){
   if(count==null)return false;
   const total=Number(count);
@@ -484,6 +505,9 @@ function observe(previous){
   function mount(article){
     const id=article.dataset.id, video=article.querySelector('template').content.firstElementChild.cloneNode(true);
     article.prepend(video);
+    video.muted=!reelAudioEnabled;
+    updateSoundButton(article,video);
+    video.addEventListener('volumechange',()=>updateSoundButton(article,video));
     const reel=clip(id);
     if(reel?.captions){const track=document.createElement('track');track.kind='captions';track.label='Captions';track.srclang='und';
       track.src=URL.createObjectURL(new Blob([reel.captions],{type:'text/vtt'}));video.append(track);}
@@ -497,7 +521,11 @@ function observe(previous){
       watch.counted=true;
       recordReelView(clip(id));
     }
-    watch.play=()=>video.play().then(countPlayback).catch(()=>{});
+    watch.play=()=>video.play().then(countPlayback).catch(()=>{
+      if(!video.isConnected||!watch.visible||video.muted)return;
+      video.muted=true;
+      return video.play().then(countPlayback).catch(()=>{});
+    });
     video.addEventListener('playing',countPlayback);
     video.addEventListener('timeupdate',()=>{
       if(video.seeking)return;
@@ -554,9 +582,10 @@ document.addEventListener('visibilitychange',()=>{
   }
 });
 let marketGroup='creators';
+const marketWindows={'1m':60000,'5m':300000,'30m':1800000,'1h':3600000,'24h':86400000};
+let marketRange='1h',useTestnetFills=false,marketPaintedAt=0;
 const marketDemoUsdRate=600;
 const marketUsdFormatter=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:6});
-const sampleUsdFormatter=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'});
 function marketUsd(amount){
   const usd=Number(amount)*marketDemoUsdRate;
   return usd>0&&usd<0.000001?'<span title="Less than one millionth of a dollar">&lt;$0.000001</span>':marketUsdFormatter.format(usd);
@@ -574,18 +603,26 @@ function isSampleMoment(id,coin){
   const example=demoMoments[id];
   return Boolean(example&&coin&&!coin.id&&coin.name===example.name&&coin.offset===example.offset);
 }
-function sampleTrades(scope,now){
-  return sampleTradeMarkets.flatMap(({id,type,lot,delay},index)=>{
+function sampleTrades(scope,now,range=marketRange,limit=4){
+  let markets=sampleTradeMarkets;
+  if(scope.startsWith('creator-')&&!markets.some(m=>m.type==='creator'&&'creator-'+m.id===scope)){
+    const id=scope.slice(8),seed=demoMetricSeed(id);
+    markets=[...markets,{id,type:'creator',lot:3200+seed*150,delay:seed%12}];
+  }
+  return markets.flatMap(({id,type,lot,delay},index)=>{
     const coin=type==='moment'?demoMoments[id]:chan(id);
-    // Only the example assets have fictional trades, even when a user adds a coin to the same clip.
-    if(type==='moment' ? !momentsFor(id).some(moment=>isSampleMoment(id,moment)) : !coin?.coin||coin.shared) return [];
+    if(type==='moment' ? !momentsFor(id).some(moment=>isSampleMoment(id,moment)) : !coin?.coin) return [];
     const key=type==='moment'?'moment-'+id:'creator-'+id;
     const onWatchlist=s.watchlist?.includes(type==='moment'?'moment-'+id:id);
     if(scope==='creators' ? type!=='creator' : scope==='moments' ? type!=='moment' :
       scope==='saved' ? !onWatchlist : scope!==key) return [];
-    const interval=68+index*6;
-    const latest=Math.floor((now-demoStartedAt-delay*1000)/(interval*1000));
-    return Array.from({length:4},(_,offset)=>{
+    const interval=(12+index*2)*1000;
+    // A fixed clock keeps demo fills consistent across reloads and tabs.
+    const start=delay*1000;
+    const latest=Math.floor((now-start)/interval);
+    const firstSlot=Math.ceil((now-marketWindows[range]-start)/interval);
+    const openingSupply=35000+index*8500;
+    return Array.from({length:Math.min(limit,latest-firstSlot+1)},(_,offset)=>{
       const slot=latest-offset;
       const sequence=slot+(type==='creator'?index:0);
       const phase=((sequence%4)+4)%4;
@@ -593,56 +630,52 @@ function sampleTrades(scope,now){
       const first=Math.round((lot+((Math.abs(cycle)+index)%5)*lot/8)/100)*100;
       const second=Math.round(first*.6/100)*100;
       // Two fictional wallets build positions, then sell their respective lots.
-      const [before,after]=[[0,first],[first,first+second],[first+second,second],[second,0]][phase];
+      const [from,to]=[[0,first],[first,first+second],[first+second,second],[second,0]][phase];
+      const before=openingSupply+from,after=openingSupply+to;
       const side=after>before?'buy':'sell';
       const quantity=Math.abs(after-before);
       const actor=sampleTradeActors[((cycle+phase%2+index)%6+6)%6];
-      const amount=type==='moment'
-        ? Number(momentBNB(momentReserve(Math.max(before,after))-momentReserve(Math.min(before,after))))
-        : quantity*(0.000002+0.000008*(before+after)/1000000);
-      return {name:type==='moment'?coin.name:'$'+coin.coin,actor,side,quantity,amount,time:demoStartedAt+(slot*interval+delay)*1000};
+      const curve=type==='moment'?momentCurve:demoCreatorCurve;
+      const amount=curve.reserve(Math.max(before,after))-curve.reserve(Math.min(before,after));
+      return {name:type==='moment'?coin.name:'$'+coin.coin,actor,side,quantity,amount:String(amount),
+        time:start+slot*interval,sold:after,marketCap:curveMarketCap(after,curve)};
     });
-  }).sort((a,b)=>b.time-a.time).slice(0,4);
-}
-function sampleTradeRows(trades,now){
-  return trades.map(({name,actor,side,quantity,amount,time})=>{
-    const seconds=Math.max(0,Math.floor((now-time)/1000));
-    const age=seconds<5?'Just now':seconds<60?seconds+'s ago':Math.floor(seconds/60)+'m ago';
-    return '<li><span class="sampleTradeSide '+side+'">'+(side==='buy'?'Buy':'Sell')+'</span>'+
-      '<span class="sampleTradeIdentity"><strong>'+esc(name)+'</strong><small>'+esc(actor)+' · '+fmt(quantity)+' coins</small></span>'+
-      '<span class="sampleTradeValue"><strong>'+sampleUsdFormatter.format(amount*marketDemoUsdRate)+'</strong><time datetime="'+new Date(time).toISOString()+'">'+age+'</time></span></li>';
-  }).join('');
-}
-function sampleTradeFeed(scope,compact=false){
-  const now=Date.now(),trades=sampleTrades(scope,now);
-  if(!trades.length)return '';
-  const title='Market activity <span class="demoLabel">Demo</span>';
-  const body='<p>Simulated trades by fictional accounts</p><ol data-sample-trades="'+scope+'">'+sampleTradeRows(trades,now)+'</ol>';
-  return compact?'<details class="sampleTradeFeed"><summary>'+title+'</summary>'+body+'</details>':
-    '<section class="sampleTradeFeed"><h2>'+title+'</h2>'+body+'</section>';
+  }).sort((a,b)=>b.time-a.time).slice(0,limit);
 }
 setInterval(()=>{
-  if(document.hidden)return;
-  const now=Date.now();
-  for(const list of document.querySelectorAll('[data-sample-trades]')){
-    if(list.closest('details:not([open])'))continue;
-    const rows=sampleTradeRows(sampleTrades(list.dataset.sampleTrades,now),now);
-    if(list.innerHTML!==rows)list.innerHTML=rows;
+  if(document.hidden||$('dialog')?.open)return;
+  const rows=document.querySelectorAll('[data-sample-stats]');
+  if(!rows.length)return;
+  const now=marketPaintedAt=Date.now();
+  for(const row of rows){
+    const stats=sampleMarketStats(row.dataset.sampleStats,now);
+    if(row.innerHTML!==stats)row.innerHTML=stats;
   }
 },5000);
 function marketBadge(label,value,explanation){
   return '<span class="marketBadge" title="'+esc(explanation)+'"><span>'+label+'</span> <b>'+value+'</b></span>';
 }
-function marketAudit(holders,top10){
+function demoMetricSeed(key){
+  return Array.from(key).reduce((hash,char)=>(hash*31+char.codePointAt(0))%23,7);
+}
+function demoMarketMetrics(key,position,curve){
+  const seed=demoMetricSeed(key);
+  return {liquidity:momentBNB(80000000000000n+BigInt(seed)*20000000000000n+2n*curve.reserve(position.sold)),
+    holders:88+seed*31+Number(position.owned>0),top10:(12+seed*.7).toFixed(1)+'%',
+    audit:{dev:(1.5+seed*.16).toFixed(1)+'%',snipers:(seed*.07).toFixed(1)+'%',insiders:(seed*.11).toFixed(1)+'%',
+      bundlers:(seed*.04).toFixed(1)+'%',blueChip:(3+seed*.54).toFixed(1)+'%',burned:seed%2?'100%':'0%',
+      paid:seed%2?'Paid':'Unpaid',security:'Sample pass'}};
+}
+function marketAudit(holders,top10,audit){
   const unavailable='Unavailable for this market';
   return '<div class="marketAudit" aria-label="Holder and audit metrics">'+[
     ['Top 10',top10,'Share of circulating coins held by the ten largest wallets'],
-    ['Dev holdings',null,unavailable],['Snipers',null,unavailable],
-    ['Insiders',null,unavailable],['Bundlers',null,unavailable],
+    ['Dev holdings',audit?.dev,unavailable],['Snipers',audit?.snipers,unavailable],
+    ['Insiders',audit?.insiders,unavailable],['Bundlers',audit?.bundlers,unavailable],
     ['Holders',holders,'Wallets holding circulating coins'],
-    ['Blue-chip holders',null,unavailable],['LP burned',null,'No DEX pool'],
-    ['DEX paid',null,'DEXScreener payment status unavailable'],['Security',null,'No token safety rating available']
-  ].map(([label,value,description])=>marketBadge(label,value??'—',description)).join('')+'</div>';
+    ['Blue-chip holders',audit?.blueChip,unavailable],['LP burned',audit?.burned,'No DEX pool'],
+    ['DEX paid',audit?.paid,'DEXScreener payment status unavailable'],['Security',audit?.security,'No token safety rating available']
+  ].map(([label,value,description])=>marketBadge(label,value??'—',audit?'Illustrative demo data':description)).join('')+'</div>';
 }
 function marketAge(timestamp){
   if(!timestamp)return '—';
@@ -652,35 +685,52 @@ function marketAge(timestamp){
   if(minutes<1440)return Math.floor(minutes/60)+'h';
   return Math.floor(minutes/1440)+'d';
 }
-function marketStats({marketCap,holders,top10,fills,format}){
-  const prices=fills.map(fill=>Number(format(BigInt(fill.amount)/BigInt(fill.quantity))));
+function marketStats({marketCap,holders,top10,fills,format,historyStart,liquidity,audit},now=Date.now(),range=marketRange){
+  const since=now-marketWindows[range];
+  const periodFills=fills.filter(fill=>fill.time>=since&&fill.time<=now);
+  const caps=periodFills.filter(fill=>fill.marketCap!=null).map(fill=>({time:fill.time,value:Number(fill.marketCap)}));
+  const prices=caps.map(point=>point.value);
   const first=prices[0], lastPrice=prices.at(-1);
   const change=prices.length>1&&first>0?(lastPrice-first)/first*100:null;
   const tone=change===null?'':change<0?'negative':'positive';
-  let chart='<small>'+(prices.length?'1 recent fill':'No recent fills')+'</small>';
-  if(change!==null){
+  const partial=historyStart!=null&&historyStart>since;
+  let chart='<small>'+(periodFills.length?'No market cap history':partial?'No fills in available history':'No fills in '+range)+'</small>';
+  if(prices.length){
     const low=Math.min(...prices), span=Math.max(...prices)-low;
-    const points=prices.map((value,i)=>[2+96*i/(prices.length-1),span?30-28*(value-low)/span:16]);
-    chart='<svg viewBox="0 0 100 32" preserveAspectRatio="none" role="img" aria-label="Recent fill prices"><polyline points="'+points.join(' ')+'"/></svg>';
+    const points=Array.from({length:Math.min(prices.length,80)},(_,i)=>{
+      const index=Math.floor(i*(prices.length-1)/Math.max(1,Math.min(prices.length,80)-1));
+      const x=2+96*(caps[index].time-since)/marketWindows[range];
+      return [x.toFixed(2),span?(30-28*(prices[index]-low)/span).toFixed(2):16];
+    });
+    const drawing=points.length===1?'<circle cx="'+points[0][0]+'" cy="16" r="2.2"/>':
+      '<polygon points="'+points[0][0]+',32 '+points.join(' ')+' '+points.at(-1)[0]+',32"/><polyline points="'+points.join(' ')+'"/>';
+    chart='<svg viewBox="0 0 100 32" preserveAspectRatio="none" role="img" aria-label="Market cap chart · '+range+'">'+drawing+'</svg>';
   }
   const stat=(label,value)=>'<span class="marketStat"><small>'+label+'</small><b>'+value+'</b></span>';
-  const volume=fills.reduce((sum,fill)=>sum+BigInt(fill.amount),0n);
-  const buys=fills.filter(fill=>fill.side==='buy').length;
-  const changeLabel=change===null?'':'<small class="'+tone+'" title="Fill price change from first to latest trade">'+
+  const volume=format(periodFills.reduce((sum,fill)=>sum+BigInt(fill.amount),0n));
+  const buys=periodFills.filter(fill=>fill.side==='buy').length;
+  const changeLabel=change===null?'':'<small class="'+tone+'" title="Market cap change from first to latest trade">'+
     (change>0?'+':'')+change.toFixed(2)+'%</small>';
   return '<div class="marketNumbers"><span class="marketSpark '+tone+'">'+chart+'</span>'+
-    '<div class="marketCap">'+stat('Market cap',marketUsd(marketCap))+changeLabel+'</div>'+
-    stat('Liquidity','<span title="No DEX pool">—</span>')+stat('Volume',marketUsd(format(volume)))+
-    stat('TXNs',fmt(fills.length)+' <small><span class="positive" title="Buys">'+fmt(buys)+' B</span> / <span class="negative" title="Sells">'+fmt(fills.length-buys)+' S</span></small>')+
-    '</div>'+marketAudit(holders,top10);
+    '<div class="marketCap">'+stat('Market cap',marketCap==null?'—':marketUsd(marketCap))+changeLabel+'</div>'+
+    stat('Liquidity',liquidity==null?'<span title="No DEX pool">—</span>':'<span title="Illustrative demo liquidity">'+marketUsd(liquidity)+'</span>')+stat('Volume',marketUsd(volume))+
+    stat('TXNs',fmt(periodFills.length)+' <small><span class="positive" title="Buys">'+fmt(buys)+' B</span> / <span class="negative" title="Sells">'+fmt(periodFills.length-buys)+' S</span></small>')+
+    '</div>'+marketAudit(holders,top10,audit)+(partial?'<small class="marketDataStatus">Partial window · last 1,000 Testnet blocks</small>':'');
 }
-function marketRow({name,detail,art,key,action,stats,creatorId,age,views}){
+function sampleMarketStats(scope,now){
+  const market=scope.startsWith('creator-')?scope:scope.slice(7);
+  const curve=scope.startsWith('creator-')?demoCreatorCurve:momentCurve;
+  const position=demoTradePosition(momentLedger(),market,scope,now);
+  return marketStats({...demoMarketMetrics(market,position,curve),marketCap:curveMarketCap(position.sold,curve),
+    fills:demoMarketHistory(position,scope,now,marketRange,curve),format:momentBNB},now);
+}
+function marketRow({name,detail,art,key,action,stats,creatorId,sampleScope,age,views}){
   const saved=s.watchlist?.includes(key);
   return '<article class="marketRow"><div class="marketIdentity"><span class="assetArt" aria-hidden="true" style="'+art+'">'+(art?'':esc(name[0]))+'</span>'+
-    '<div class="assetName"><strong>'+esc(name)+'</strong><small>'+detail+'</small><small class="marketIdentityStats">'+
+    '<div class="assetName"><strong>'+esc(name)+'</strong>'+(sampleScope?' <span class="demoLabel">Demo</span>':'')+'<small>'+detail+'</small><small class="marketIdentityStats">'+
     marketBadge('Age',esc(marketAge(age)),'Time since launch')+marketBadge('Views',fmt(views),'Source video views')+
     marketBadge('Fee','0%','Pulse protocol fee')+'</small></div></div>'+
-    '<div class="marketStats"'+(creatorId?' data-creator-stats="'+esc(creatorId)+'"':'')+'>'+stats+'</div>'+
+    '<div class="marketStats"'+(creatorId?' data-creator-stats="'+esc(creatorId)+'"':'')+(sampleScope?' data-sample-stats="'+esc(sampleScope)+'"':'')+'>'+stats+'</div>'+
     '<div class="marketActions">'+action+'<button class="star" data-act="watch:'+esc(key)+'" aria-pressed="'+!!saved+
     '" aria-label="Watchlist: '+esc(name)+'">'+(saved?'★':'☆')+'</button></div></article>';
 }
@@ -711,53 +761,73 @@ function momentCreatedAt(coin){
   return coin.createdAt??(coin.offset==null?null:demoStartedAt+coin.offset*1000);
 }
 function momentMarketCap(position){
-  return momentBNB(momentPrice(position.sold)*BigInt(position.sold));
+  return curveMarketCap(position.sold,momentCurve);
 }
-function momentMarket(){
+function momentMarket(now){
   const moments=s.clips.flatMap(reel=>momentsFor(reel.id).map(coin=>({reel,coin,id:coin.id||reel.id})))
     .filter(({id})=>marketGroup!=='saved'||s.watchlist?.includes('moment-'+id));
   if(!moments.length)return '';
   const ledger=momentLedger();
-  return '<section class="momentMarket"><h2>Moment Coins <span class="demoLabel">Demo</span></h2><p class="marketScope">Coin stats use your last 20 demo fills on this device. Market cap uses circulating coins. — means unavailable.</p>'+
+  return '<section class="momentMarket"><h2>Moment Coins <span class="demoLabel">Demo</span></h2><p class="marketScope">Liquidity and holder metrics are illustrative. Trades you confirm here are saved in this browser.</p>'+
     moments.map(({reel,coin,id})=>{
       const position=momentPosition(ledger,coin.ledgerId||id);
+      const sampleScope=isSampleMoment(reel.id,coin)?'moment-'+reel.id:null;
       return marketRow({
         name:coin.name,detail:esc(reel.title)+' · '+momentTime(coin.time)+' · '+esc(coin.launcher||'You'),
         art:frameArt(coin,reel),key:'moment-'+id,views:last(reel.views),
-        age:momentCreatedAt(coin),action:btn('Trade',momentAction('tradeMoment',reel,coin),'marketTrade'),
-        stats:marketStats({marketCap:momentMarketCap(position),
-          holders:position.owned>0?1:0,top10:position.owned>0?'100%':null,
-          fills:position.fills||[],format:momentBNB})
+        age:momentCreatedAt(coin)??(epoch-(2+demoMetricSeed(id))*3600000),action:btn('Trade',momentAction('tradeMoment',reel,coin),'marketTrade'),
+        sampleScope,stats:sampleScope?sampleMarketStats(sampleScope,now):marketStats({marketCap:momentMarketCap(position),
+          ...demoMarketMetrics(id,position,momentCurve),
+          fills:demoMarketHistory(position,null,now,marketRange,momentCurve),format:momentBNB},now)
       });
     }).join('')+'</section>';
 }
 function marketHome(){
+  const now=marketPaintedAt=Date.now();
   const visible=marketGroup==='moments'?[]:s.channels.filter(c=>c.coin&&(marketGroup!=='saved'||s.watchlist?.includes(c.id)));
-  const moments=marketGroup==='creators'?'':momentMarket();
+  const moments=marketGroup==='creators'?'':momentMarket(now);
+  const canSwitch=visible.length>0;
+  const timeControls=viewTabs('Market timeframe',Object.keys(marketWindows).map(key=>[key,key]),marketRange,'marketTime');
+  const sourceControls=canSwitch?viewTabs('Creator coin activity source',
+    [['demo','Demo activity'],['testnet','Testnet fills']],useTestnetFills?'testnet':'demo','marketSource'):'';
   return '<div class="marketHome"><div class="balanceBlock"><div><small>BSC TESTNET · CHAIN 97</small><h1>Coin markets</h1><p>Market values use a demo rate of '+marketUsd(1)+' per tBNB.</p></div></div>'+
     '<div class="marketTabs" role="group" aria-label="Coin markets">'+
     [['creators','Creator Coins'],['moments','Moment Coins'],['saved','Watchlist']].map(([key,label])=>
       '<button type="button" class="'+(key===marketGroup?'selected':'')+'" data-act="group:'+key+
-      '" aria-pressed="'+(key===marketGroup)+'">'+label+'</button>').join('')+'</div>'+sampleTradeFeed(marketGroup)+
-    (visible.length?'<h2>Creator Coins</h2><p class="marketScope">Activity uses the last 1,000 BSC Testnet blocks. Market cap uses circulating coins. — means unavailable.</p>'+
-      visible.map(c=>marketRow({
+      '" aria-pressed="'+(key===marketGroup)+'">'+label+'</button>').join('')+'</div>'+
+    '<div class="marketControls">'+timeControls+sourceControls+'</div>'+
+    (visible.length?'<h2>Creator Coins</h2><p class="marketScope">'+(canSwitch&&!useTestnetFills?
+      'Demo markets use simulated trades, liquidity, and holder metrics.':
+      'BSC Testnet trade history covers up to 1,000 recent blocks.')+' Market cap uses circulating coins.</p>'+
+      visible.map(c=>{
+        const sampleScope=!useTestnetFills?'creator-'+c.id:null;
+        return marketRow({
         name:'$'+c.coin,detail:esc(c.name),art:c.shared||c.id==='me'?'':'background-image:url(media/'+encodeURIComponent(c.id)+'.jpg)',
-        key:c.id,views:s.clips.filter(reel=>reel.owner===c.id).reduce((total,reel)=>total+last(reel.views),0),
-        action:link('Trade','Trading/'+c.id,'marketTrade'),creatorId:c.id,
-        stats:'<small class="marketDataStatus">Loading market data…</small>'
-      })).join(''):'')+
+        key:c.id,age:sampleScope?epoch-(5+demoMetricSeed(c.id))*3600000:null,
+        views:s.clips.filter(reel=>reel.owner===c.id).reduce((total,reel)=>total+last(reel.views),0),
+        action:sampleScope?btn('Trade','demoCreatorTrade:'+esc(c.id),'marketTrade'):link('Trade','Trading/'+c.id,'marketTrade'),
+        creatorId:sampleScope?null:c.id,sampleScope,
+        stats:sampleScope?sampleMarketStats(sampleScope,now):'<small class="marketDataStatus">Loading market data…</small>'
+        });
+      }).join(''):'')+
     (!visible.length&&!moments?'<p class="emptyMarket">'+(marketGroup==='saved'?'Star a coin to add it to your watchlist.':'No coins available.')+'</p>':'')+moments+'</div>';
 }
+let creatorMarketSnapshot;
 async function paintMarketRows(){
   const rows=[...document.querySelectorAll('[data-creator-stats]')];
   if(!rows.length)return;
+  const creators=rows.map(row=>chan(row.dataset.creatorStats));
+  const key=JSON.stringify(creators.map(creator=>[creator.id,creator.walletId]));
+  if(creatorMarketSnapshot?.key!==key||Date.now()-creatorMarketSnapshot.time>=15000){
+    creatorMarketSnapshot={key,time:Date.now(),request:window.pulseWallet.marketSnapshot(creators)};
+  }
   let snapshot;
-  try{snapshot=await window.pulseWallet.marketSnapshot(rows.map(row=>chan(row.dataset.creatorStats)));}
+  try{snapshot=await creatorMarketSnapshot.request;}
   catch{snapshot=new Map();}
   for(const row of rows){
     if(!row.isConnected)continue;
     const data=snapshot.get(row.dataset.creatorStats);
-    if(data&&!data.status)row.innerHTML=marketStats(data);
+    if(data&&!data.status)row.innerHTML=marketStats(data,data.asOf);
     else{
       const message=document.createElement('small');
       message.className='marketDataStatus';
@@ -777,18 +847,24 @@ function trade(id){
   if(!c)return missingResource('market','Trading');
   return heading('Trading','BSC Testnet · tBNB',link('All markets','Trading',''))+
     '<div class="layout"><section class="panel"><h2>'+esc(c.name)+'</h2>'+link('View profile','Profile/'+c.id)+'<p>Channel coin $'+esc(c.coin)+'</p></section><section class="panel chainPanel" id="chainPanel"></section></div>'+
-    sampleTradeFeed('creator-'+c.id)+'<h2 class="sectionhead">Latest videos</h2>'+cards(newest(s.clips.filter(x=>x.owner===c.id)));
+    '<h2 class="sectionhead">Latest videos</h2>'+cards(newest(s.clips.filter(x=>x.owner===c.id)));
 }
 function momentHoldings(){
-  const markets=momentLedger().markets;
+  const ledger=momentLedger(),markets=ledger.markets;
   const rows=s.clips.flatMap(reel=>momentsFor(reel.id).filter(coin=>markets[coin.ledgerId||coin.id||reel.id]?.owned>0).map(coin=>
     btn(esc(coin.name)+' · '+fmt(markets[coin.ledgerId||coin.id||reel.id].owned)+' coins',momentAction('tradeMoment',reel,coin),'subtle')));
-  return '<section class="panel"><h2>Demo Moment holdings</h2>'+(rows.join('')||'<p>No Moment Coins held.</p>')+'</section>';
+  for(const creator of s.channels){
+    const held=markets['creator-'+creator.id]?.owned;
+    if(held&&creator.coin)rows.push(btn('$'+esc(creator.coin)+' · '+fmt(held)+' coins','demoCreatorTrade:'+esc(creator.id),'subtle'));
+  }
+  return '<p class="portfolioBalance"><span class="demoLabel">Demo</span> <strong>'+momentBNB(BigInt(ledger.cash))+' tBNB</strong></p>'+
+    (rows.length?'<div class="portfolioPositions">'+rows.join('')+'</div>':'<p class="muted">No demo coins held.</p>');
 }
 function paintWallet(){
   if($('#holdings'))window.pulseWallet.portfolio($('#holdings'),s.channels);
-  const sheet=$('#reelTicket');if(sheet&&$('dialog').open)window.pulseWallet.panel(sheet,chan(sheet.dataset.owner));
-  const root=$('#chainPanel');if(root)window.pulseWallet.panel(root,chan(path()[1]));
+  const chartOptions={range:marketRange,windowMs:marketWindows[marketRange],toUsd:marketDemoUsdRate};
+  const sheet=$('#reelTicket');if(sheet&&$('dialog').open)window.pulseWallet.panel(sheet,chan(sheet.dataset.owner),chartOptions);
+  const root=$('#chainPanel');if(root)window.pulseWallet.panel(root,chan(path()[1]),chartOptions);
 }
 window.addEventListener('pulse-wallet-change',()=>{if(accountScope!==(window.pulseWallet.account?.()||myId())){switchAccount();$('dialog')?.close();if(shared)loadShared();}if(path()[0]==='Login'&&!window.pulseWallet.signed()&&$('#walletLogin button:disabled'))return;if($('#reelTicket')&&$('dialog').open){paintWallet();return;}render();});
 window.addEventListener('pulse-creator-linked',event=>{const c=self();if(c&&!c.walletId){c.walletId=event.detail;save();paintWallet();}});
@@ -858,7 +934,7 @@ function profile(id=myId()){
   return '<section class="creatorProfile"><div class="creatorIntro"><div class="creatorDetails"><h1>'+esc(name)+'</h1>'+
     (handle?'<p>@'+esc(handle)+'</p>':'')+'<dl class="creatorStats">'+stats.map(([label,count])=>'<div><dt>'+label+'</dt><dd>'+fmt(count)+'</dd></div>').join('')+'</dl></div>'+profileAvatar(channel||{name},'creatorAvatar')+'</div>'+
     social+(action||mine&&channel?'<div class="creatorActions">'+action+(mine&&channel?btn('Create video','create','')+btn('Edit profile photo','editPhoto',''):'')+'</div>':'')+
-    (mine?'<section class="panel portfolio" id="holdings"></section>'+momentHoldings():'')+
+    (mine?'<section class="panel portfolio"><h2>Your portfolio</h2><div id="demoHoldings">'+momentHoldings()+'</div><div id="holdings"></div></section>':'')+
     (mine?viewTabs('Profile videos',[[0,'Posts'],[1,'Reposts'],[2,'Liked'],[3,'Saved']],tab,'tab'):'<h2 class="profilePosts">Posts</h2>')+
     (items.length?'<div class="creatorGrid">'+newest(items).map(reel=>reelThumb(reel)).join('')+'</div>':'<p class="emptyView">No videos here yet.</p>')+'</section>';
 }
@@ -927,49 +1003,87 @@ function momentLedger(){
 function momentPosition(ledger,id){return ledger.markets[id]||{sold:0,owned:0};}
 function momentPrice(sold){return 4000000000n+8000n*BigInt(sold);}
 function momentReserve(sold){return BigInt(sold)*(momentPrice(0)+momentPrice(sold))/2n;}
+const momentCurve={price:momentPrice,reserve:momentReserve,cap:momentCurveCap,target:momentTarget};
+const demoCreatorPrice=sold=>20000000000n+160000n*BigInt(sold);
+const demoCreatorReserve=sold=>BigInt(sold)*(demoCreatorPrice(0)+demoCreatorPrice(sold))/2n;
+const demoCreatorCurve={price:demoCreatorPrice,reserve:demoCreatorReserve,cap:500000,target:3n*momentUnit};
+function curveMarketCap(sold,curve){
+  return momentBNB(curve.price(sold)*BigInt(sold));
+}
+function demoTradePosition(ledger,marketId,sampleScope,now){
+  if(ledger.markets[marketId]||!sampleScope)return momentPosition(ledger,marketId);
+  return {sold:sampleTrades(sampleScope,now,'1m',1)[0]?.sold??0,owned:0,sampleAt:now};
+}
+function demoMarketHistory(position,sampleScope,now,range,curve){
+  const sampleAt=Math.min(now,position.sampleAt??(position.fills?.length?0:now));
+  const sample=sampleScope&&sampleAt?
+    sampleTrades(sampleScope,sampleAt,range,Infinity).reverse():[];
+  let sold=position.sold;
+  const fills=(position.fills||[]).slice().reverse().map(fill=>{
+    const point={...fill,sold,marketCap:curveMarketCap(sold,curve)};
+    sold+=fill.side==='buy'?-fill.quantity:fill.quantity;
+    return point;
+  }).reverse();
+  return [...sample,...fills].filter(fill=>fill.time>=now-marketWindows[range]&&fill.time<=now);
+}
 function momentBNB(amount){
   const decimals=(amount%momentUnit).toString().padStart(16,'0').replace(/0+$/,'');
   return (amount/momentUnit).toString()+(decimals?'.'+decimals:'');
 }
-function quoteMoment(position,side,requested){
-  if(side==='buy'&&position.sold===momentCurveCap)throw Error('All curve coins are held. You can still sell to the demo reserve.');
+function quoteMoment(position,side,requested,curve=momentCurve){
+  if(side==='buy'&&position.sold===curve.cap)throw Error('All curve coins are held. You can still sell to the demo reserve.');
   if(!Number.isSafeInteger(requested)||requested<=0)throw Error('Enter a whole number of coins.');
   const buy=side==='buy';
   if(!buy&&requested>position.owned)throw Error('You do not have enough Moment Coins.');
-  const quantity=buy?Math.min(requested,momentCurveCap-position.sold):requested;
+  const quantity=buy?Math.min(requested,curve.cap-position.sold):requested;
   const sold=position.sold+(buy?quantity:-quantity);
-  const amount=buy?momentReserve(sold)-momentReserve(position.sold):momentReserve(position.sold)-momentReserve(sold);
+  const amount=buy?curve.reserve(sold)-curve.reserve(position.sold):curve.reserve(position.sold)-curve.reserve(sold);
   return {side,requested,quantity,sold,amount,before:position.sold};
 }
-function settleMoment(reelId,preview){
-  const ledger=momentLedger(), position=momentPosition(ledger,reelId), buying=preview.side==='buy';
+function quoteDemoBudget(position,budget,curve){
+  let low=0,high=curve.cap-position.sold;
+  const reserve=curve.reserve(position.sold);
+  while(low<high){
+    const quantity=Math.ceil((low+high)/2);
+    if(curve.reserve(position.sold+quantity)-reserve<=budget)low=quantity;
+    else high=quantity-1;
+  }
+  if(!low)throw Error('The budget is below the minimum buy amount, or the curve is full.');
+  return quoteMoment(position,'buy',low,curve);
+}
+function settleMoment(reelId,preview,curve=momentCurve,sampleScope=null){
+  const ledger=momentLedger(), position=demoTradePosition(ledger,reelId,sampleScope,preview.sampleAt??Date.now());
+  const buying=preview.side==='buy';
   if(position.sold!==preview.before)throw Error('The price changed. Preview the trade again.');
-  const quote=quoteMoment(position,preview.side,preview.requested);
+  const quote=quoteMoment(position,preview.side,preview.requested,curve);
   const cash=BigInt(ledger.cash);
   if(buying&&cash<quote.amount)throw Error('Your demo tBNB balance is too low.');
   ledger.cash=String(cash+(buying?-quote.amount:quote.amount));
   const fill={time:Date.now(),side:quote.side,quantity:quote.quantity,amount:String(quote.amount)};
   ledger.markets[reelId]={sold:quote.sold,owned:position.owned+(buying?quote.quantity:-quote.quantity),
-    fills:[...(position.fills||[]),fill].slice(-20)};
+    fills:[...(position.fills||[]),fill].slice(-20),sampleAt:position.sampleAt};
   localStorage.setItem(ledgerKey(),JSON.stringify(ledger));
   return quote;
 }
-function momentMarketChart(position,view){
-  const history=view==='fills';
-  const values=history?(position.fills||[]).map(fill=>BigInt(fill.amount)/BigInt(fill.quantity)):[momentPrice(0),momentPrice(momentCurveCap)];
-  if(!values.length)return '<p class="momentChartEmpty">Confirmed trades will appear here.</p>';
+function momentMarketChart(curve,fills){
+  const values=fills.map(fill=>curve.price(fill.sold)*BigInt(fill.sold));
+  if(!values.length)return '<p class="momentChartEmpty">No trades in the selected '+marketRange+' window.</p>';
   const min=values.reduce((a,b)=>a<b?a:b), max=values.reduce((a,b)=>a>b?a:b);
   const y=value=>15+90*(1-Number(value-min)/Number(max-min||1n));
-  const points=values.map((value,i)=>[values.length===1?160:8+i*304/(values.length-1),max===min?60:y(value)]);
-  const mark=history?points.at(-1):[8+304*position.sold/momentCurveCap,y(momentPrice(position.sold))];
-  const dots=points.map(([x,y],index)=>history?'<circle cx="'+x+'" cy="'+y+'" r="3" class="'+((position.fills[index].side==='sell')?'sold':'bought')+'"/>':'').join('');
-  return '<div class="momentPlot"><svg viewBox="0 0 320 120" preserveAspectRatio="none" role="img" aria-label="'+(history?'Confirmed demo fill prices':'Bonding curve with current price marked')+'">'+
+  const count=Math.min(values.length,120);
+  const points=Array.from({length:count},(_,i)=>{
+    const index=Math.floor(i*(values.length-1)/Math.max(1,count-1));
+    return [count===1?160:8+i*304/(count-1),max===min?60:y(values[index])];
+  });
+  const mark=points.at(-1);
+  const series=points.length===1?'<circle cx="'+mark[0]+'" cy="'+mark[1]+'" r="3" class="plotMarker"/>':
+    '<polyline class="plotLine" points="'+points.map(point=>point.join(',')).join(' ')+'"/>';
+  return '<div class="momentPlot"><svg viewBox="0 0 320 120" preserveAspectRatio="none" role="img" aria-label="Market cap history">'+
     '<path class="plotGrid" d="M8 15H312 M8 60H312 M8 105H312"/>'+
     '<path class="plotGuide" d="M8 '+mark[1]+'H312"/>'+
-    '<polyline class="plotLine" points="'+points.map(point=>point.join(',')).join(' ')+'"/>'+dots+
-    (history?'':'<circle class="plotMarker" cx="'+mark[0]+'" cy="'+mark[1]+'" r="5"/>')+'</svg>'+
-    '<div class="momentPlotScale'+(max===min?' flat':'')+'"><span>'+momentBNB(max)+'</span>'+(max===min?'':'<span>'+momentBNB(min)+'</span>')+'</div></div>'+
-    '<div class="momentPlotAxis"><span>'+(history?'First shown fill':'0 sold')+'</span><span>'+(history?'Latest fill':'500,000 sold')+'</span></div>';
+    series+'</svg>'+
+    '<div class="momentPlotScale'+(max===min?' flat':'')+'"><span>'+marketUsd(momentBNB(max))+'</span>'+(max===min?'':'<span>'+marketUsd(momentBNB(min))+'</span>')+'</div></div>'+
+    '<div class="momentPlotAxis"><span>First shown fill</span><span>Latest fill</span></div>';
 }
 function momentFillList(fills){
   const rows=fills.slice().reverse().map(fill=>{
@@ -979,79 +1093,102 @@ function momentFillList(fills){
   return '<details class="momentFillList"><summary>Recent trades <span>'+fills.length+'</span></summary>'+
     (rows?'<ol>'+rows+'</ol>':'<p>No trades recorded yet.</p>')+'</details>';
 }
-function openMomentTrade(reel,coin,{view='curve',back=()=>$('dialog').close()}={}){
+function openMomentTrade(reel,coin,options={}){
   if(!coin)return;
   const coinId=coin.id||reel.id, marketId=coin.ledgerId||coinId;
-  const coins=momentsFor(reel.id);
+  openDemoTrade({reel,coin,marketId,curve:momentCurve,
+    sampleScope:isSampleMoment(reel.id,coin)?'moment-'+reel.id:null},options);
+}
+function openDemoCreatorTrade(creator,options){
+  if(!creator?.coin)return;
+  const reel=s.clips.find(item=>item.owner===creator.id);
+  const marketId='creator-'+creator.id;
+  openDemoTrade({creator,reel,coin:{name:'$'+creator.coin},marketId,curve:demoCreatorCurve,sampleScope:marketId},options);
+}
+function openDemoTrade(market,{back=()=>$('dialog').close(),now=Date.now()}={}){
+  const {reel,coin,creator,marketId,curve,sampleScope}=market;
+  const coinId=coin.id||reel?.id;
+  const coins=creator?[]:momentsFor(reel.id);
   const switcher=coins.length>1?'<label class="momentCoinSwitcher">Switch coin <select id="momentCoinSelect">'+
     coins.map(option=>{
       const id=option.id||reel.id;
       return '<option value="'+esc(id)+'"'+(id===coinId?' selected':'')+'>'+
         esc(option.name)+' · '+momentTime(option.time)+'</option>';
     }).join('')+'</select></label>':'';
-  const ledger=momentLedger(), position=momentPosition(ledger,marketId);
-  const reserve=momentReserve(position.sold);
-  const complete=position.sold===momentCurveCap;
+  const ledger=momentLedger(),position=demoTradePosition(ledger,marketId,sampleScope,now);
+  const reserve=curve.reserve(position.sold);
+  const complete=position.sold===curve.cap;
   const label=esc(coin.name), fills=position.fills||[];
-  const imageStyle=frameArt(coin,reel), price=momentBNB(momentPrice(position.sold)), balance=momentBNB(BigInt(ledger.cash));
-  modal('<section id="momentTicket" aria-label="Moment Coin trading">'+
+  const history=demoMarketHistory(position,sampleScope,now,marketRange,curve);
+  const imageStyle=reel?frameArt(coin,reel):'', cap=curveMarketCap(position.sold,curve), balance=momentBNB(BigInt(ledger.cash));
+  const source=creator?link(esc(creator.name),'Profile/'+creator.id,'subtle'):btn(esc(reel.title)+' ↗',momentAction('momentDetail',reel,coin),'subtle');
+  modal('<section id="momentTicket" aria-label="'+(creator?'Creator':'Moment')+' Coin trading">'+
     '<div class="momentMarketHeader"><button type="button" class="momentBack" aria-label="Back" title="Back">'+
     '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5m7-7-7 7 7 7"/></svg></button></div>'+
     '<div class="momentAsset"><span class="momentAssetArt" aria-hidden="true" style="'+imageStyle+'">'+(imageStyle?'':esc(coin.name[0]))+'</span>'+
-    '<div class="momentAssetMeta"><h2>'+label+'</h2>'+btn(esc(reel.title)+' ↗',momentAction('momentDetail',reel,coin),'subtle')+switcher+'</div>'+
-    '<div class="momentAssetPrice"><strong>'+price+'</strong><small>tBNB per coin</small></div></div>'+
-    '<div class="momentChart"><div class="momentChartHeading"><div class="momentChartOptions" role="group" aria-label="Price chart">'+
-    '<button type="button" data-chart="curve" aria-pressed="'+(view==='curve')+'">Curve</button><button type="button" data-chart="fills" aria-pressed="'+(view==='fills')+'">Trade prices</button></div><small>tBNB</small></div>'+
-    '<div class="momentChartBody">'+momentMarketChart(position,view)+'</div></div>'+
+    '<div class="momentAssetMeta"><h2>'+label+' <span class="demoLabel">Demo</span></h2>'+source+switcher+'</div>'+
+    '<div class="momentAssetPrice"><strong>'+marketUsd(cap)+'</strong><small>Market cap</small></div></div>'+
+    '<div class="momentChart"><div class="momentChartHeading"><strong>History · '+marketRange+'</strong><small>USD</small></div>'+
+    momentMarketChart(curve,history)+'</div>'+
     '<div class="momentPosition"><div class="momentTradeStats"><div><small>Your coins</small><strong>'+fmt(position.owned)+'</strong></div>'+
     '<div><small>Demo balance</small><strong>'+balance+' tBNB</strong></div></div>'+
-    '<label class="momentTradeProgress">Curve reserve <strong>'+momentBNB(reserve)+' / 0.30 tBNB</strong><progress max="'+momentTarget+'" value="'+reserve+'"></progress></label></div>'+
-    momentFillList(fills)+(isSampleMoment(reel.id,coin)?sampleTradeFeed('moment-'+reel.id,true):'')+
+    '<label class="momentTradeProgress">Curve reserve <strong>'+momentBNB(reserve)+' / '+momentBNB(curve.target)+' tBNB</strong><progress max="'+curve.target+'" value="'+reserve+'"></progress></label></div>'+
+    momentFillList(fills)+
     '<div class="momentTradeFooter">'+(complete?'<p>Curve fully bought. Sell to redeem from the demo reserve.</p>':'')+
-      '<form id="momentOrder"><label>Quantity <input name="quantity" type="number" min="1" max="1000000" step="1" value="100000" required></label>'+
-      '<div class="momentOrderActions"><button class="tradeBuy" type="submit" value="buy" '+(complete?'disabled':'')+'>Buy</button><button class="tradeSell" type="submit" value="sell">Sell</button></div></form>'+
+      '<form id="momentOrder" novalidate><div class="momentOrderActions"><label>Buy budget (tBNB)<input name="budget" type="number" min="0.0000000000000001" step="any" value="0.05" required></label>'+
+      '<label>Sell (% of holdings)<input name="percent" type="number" min="1" max="100" step="1" value="100" required></label>'+
+      '<button class="tradeBuy" type="submit" value="buy" '+(complete?'disabled':'')+'>Preview buy</button><button class="tradeSell" type="submit" value="sell">Preview sell</button></div></form>'+
       '<div class="momentOrderPreview" hidden></div>'+'<p class="momentTradeStatus" role="status"></p></div></section>');
   $('.momentBack').onclick=back;
   const select=$('#momentCoinSelect');
   select?.addEventListener('change',()=>{
     const next=momentFor(reel.id,select.value);
     if(!next||next===coin)return;
-    openMomentTrade(reel,next,{view,back});
+    openMomentTrade(reel,next,{back});
     $('#momentCoinSelect')?.focus({preventScroll:true});
   });
-  const chartButtons=$('#momentTicket').querySelectorAll('[data-chart]');
-  for(const button of chartButtons)button.onclick=()=>{
-    view=button.dataset.chart;
-    for(const item of chartButtons)item.setAttribute('aria-pressed',String(item===button));
-    $('.momentChartBody').innerHTML=momentMarketChart(position,view);
-  };
   const form=$('#momentOrder');
   if(!form)return;
   const panel=$('.momentOrderPreview'), status=$('.momentTradeStatus');
   form.addEventListener('input',()=>{panel.hidden=true;status.textContent='';});
   form.addEventListener('submit',event=>{
     event.preventDefault();event.stopPropagation();
-    if(!form.reportValidity())return;
     status.textContent='';panel.hidden=true;
     let quote;
-    try{quote=quoteMoment(momentPosition(momentLedger(),marketId),event.submitter?.value==='sell'?'sell':'buy',form.elements.quantity.valueAsNumber);}
+    try{
+      const sell=event.submitter?.value==='sell';
+      const input=form.elements[sell?'percent':'budget'];
+      if(!input.reportValidity()||!input.value)return;
+      const snapshot=demoTradePosition(momentLedger(),marketId,sampleScope,now);
+      if(sell)quote=quoteMoment(snapshot,'sell',Math.floor(snapshot.owned*input.valueAsNumber/100),curve);
+      else{
+        const parts=input.value.match(/^(\d*)(?:\.(\d{0,16}))?$/);
+        if(!parts)throw Error('Enter a tBNB amount with up to 16 decimal places.');
+        const budget=BigInt(parts[1]||0)*momentUnit+BigInt((parts[2]||'').padEnd(16,'0'));
+        quote=quoteDemoBudget(snapshot,budget,curve);
+        if(quote.amount>BigInt(momentLedger().cash))throw Error('Your demo tBNB balance is too low.');
+      }
+      quote.sampleAt=snapshot.sampleAt;
+    }
     catch(error){status.textContent=error.message;return;}
     const buy=quote.side==='buy', verb=buy?'Buy':'Sell';
     panel.hidden=false;
-    panel.innerHTML='<p>'+verb+' '+fmt(quote.quantity)+' coins · '+(buy?'Pay ':'Receive ')+momentBNB(quote.amount)+' tBNB</p>'+
+    panel.innerHTML='<p>Market cap '+marketUsd(curveMarketCap(quote.before,curve))+' → '+marketUsd(curveMarketCap(quote.sold,curve))+'</p>'+
+      '<p>'+(buy?'Pay ':'Receive ')+momentBNB(quote.amount)+' tBNB · '+fmt(quote.quantity)+' coins</p>'+
       (quote.quantity<quote.requested?'<p>Only '+fmt(quote.quantity)+' coins remain. You pay for the filled amount.</p>':'')+
-      (quote.sold===momentCurveCap?'<p>This purchase fills the curve. Holders can still sell back to the demo reserve.</p>':'')+
+      (quote.sold===curve.cap?'<p>This purchase fills the curve. Holders can still sell back to the demo reserve.</p>':'')+
       '<small>Platform fee: 0 tBNB</small><button type="button" class="primary">Confirm '+verb+'</button>';
     const confirm=panel.querySelector('button');
     confirm.onclick=async()=>{
       confirm.disabled=true;
       try{
         const walletScope=accountScope;
-        const execute=()=>{if(walletScope!==accountScope)throw Error('Account changed. Preview again.');return settleMoment(marketId,quote);};
+        const execute=()=>{if(walletScope!==accountScope)throw Error('Account changed. Preview again.');return settleMoment(marketId,quote,curve,sampleScope);};
         const fill=navigator.locks?await navigator.locks.request(ledgerKey(),execute):execute();
         if(!status.isConnected||!$('dialog').open)return;
         if($('.marketHome'))render();
-        openMomentTrade(reel,coin,{view,back});
+        if($('#demoHoldings'))$('#demoHoldings').innerHTML=momentHoldings();
+        openDemoTrade(market,{back});
         $('.momentTradeStatus').textContent=(buy?'Bought ':'Sold ')+fmt(fill.quantity)+' coins for '+momentBNB(fill.amount)+' tBNB.';
       }catch(error){
         if(!status.isConnected)return;
@@ -1067,8 +1204,9 @@ function openReelTrade(reel,source){
   if(coins.length===1)return openMomentTrade(reel,coins[0]);
   const creator=chan(reel.owner);
   if(!creator?.coin)return openMoment(reel,source);
+  if(!useTestnetFills)return openDemoCreatorTrade(creator);
   modal('<div class="reelTradeHeading"><small>CREATOR MARKET</small><strong>'+esc(creator.name)+'</strong></div>'+
-    '<div id="reelTicket" class="chainPanel" data-owner="'+esc(creator.id)+'"></div>'+sampleTradeFeed('creator-'+creator.id,true));
+    '<div id="reelTicket" class="chainPanel" data-owner="'+esc(creator.id)+'"></div>');
   paintWallet();
 }
 async function shareReel(reel){
@@ -1206,7 +1344,8 @@ function openMomentPicker(reel){
   const coins=momentsFor(reel.id), ledger=momentLedger();
   modal('<section class="momentSheet"><h2>Moment Coins</h2><p class="momentSource">'+esc(reel.title)+'</p>'+
     '<ul class="momentPicker">'+coins.map(coin=>{
-      const position=momentPosition(ledger,coin.ledgerId||coin.id||reel.id),art=frameArt(coin,reel);
+      const scope=isSampleMoment(reel.id,coin)?'moment-'+reel.id:null;
+      const position=demoTradePosition(ledger,coin.ledgerId||coin.id||reel.id,scope,Date.now()),art=frameArt(coin,reel);
       return '<li><button type="button" class="momentPickerCoin" data-act="'+momentAction('momentDetail',reel,coin)+'">'+
         '<span class="assetArt" style="'+frameArt(coin,reel)+'" aria-hidden="true">'+(art?'':esc(coin.name[0]))+
         '<canvas class="momentPickerFrame" '+(coin.frame?'hidden':'')+' width="112" height="112"></canvas></span>'+
@@ -1360,12 +1499,26 @@ function updateReelSocial(id){
   const badge=article.querySelector('.momentPill');
   if(badge)badge.outerHTML=momentBadge(reel);else article.querySelector('.byline').insertAdjacentHTML('beforeend',momentBadge(reel));
 }
-function action(str,el){let [k,v,id]=str.split(':');
-if(k==='about')return modal('<section class="aboutPulse" aria-labelledby="aboutPulseTitle">'+
+function aboutPulse(category='overview'){
+  const overview='<p>Pulse is a short-video platform for clips of any genre. We started Pulse after seeing memorable clips turn into meme coins with little going back to the people who made them.</p>'+
+    '<p>Creators can launch a Creator Coin for their channel. When a clip makes you laugh or sticks with you, capture a frame, add a name and description, and turn it into a Moment Coin tied to the original video.</p>';
+  const fees='<h3>Moment Coin trading fees</h3><p>Pulse’s planned production fee applies to each buy or sell on the bonding curve.</p>'+
+    '<dl class="aboutRates"><dt><strong>Total trading fee</strong></dt><dd>0.75%</dd>'+
+    '<dt>Original clip creator</dt><dd>0.50%</dd><dt>Pulse protocol</dt><dd>0.25%</dd></dl>'+
+    '<p>Percentages are based on the trade amount. Network gas is charged separately.</p>'+
+    '<h3>Moment Coin allocation</h3><p>At launch, 10% of the total coin supply is reserved for the original clip creator, separate from trading fees.</p>';
+  modal('<section class="aboutPulse" aria-labelledby="aboutPulseTitle">'+
   '<h2 id="aboutPulseTitle">About us</h2>'+
-  '<p>Pulse is a short-video platform for discovering creators and trading coins tied to channels and memorable clips.</p>'+
-  '<dl><dt>Creator Coins</dt><dd>Trade coins tied to creator channels on BSC Testnet.</dd>'+
-  '<dt>Moment Coins</dt><dd>Pick and crop a frame from a video, then create a coin and try trading it with a demo balance.</dd></dl></section>');
+  viewTabs('About us categories',[['overview','Overview'],['fees','Fees']],category,'aboutCategory')+
+  (category==='fees'?fees:overview)+'</section>');
+}
+function action(str,el){let [k,v,id]=str.split(':');
+if(k==='about')return aboutPulse();
+if(k==='aboutCategory'){
+  aboutPulse(v==='fees'?'fees':'overview');
+  $('.aboutPulse [aria-pressed="true"]')?.focus({preventScroll:true});
+  return;
+}
 if(k==='retrySharedProfile'&&shared)return loadShared();
 if(shared && ['channel','create','launch'].includes(k) && !window.pulseWallet.signed()){
   toast('Sign in with your wallet to publish.');return go('Login/'+k);
@@ -1386,7 +1539,7 @@ if(k==='editPhoto'){
   };
   return;
 }
-if(k==='followProfile'&&shared)return setSharedReaction(el,'follow',v);
+if(k==='followProfile'&&shared&&chan(v)?.shared&&window.pulseWallet.signed())return setSharedReaction(el,'follow',v);
 if(k==='toggle'&&v==='likes'&&shared)return setSharedReaction(el,'like',id);
 if(k==='followProfile'){
   if(v===myId()||!chan(v))return;
@@ -1409,6 +1562,18 @@ if(k==='commentLike'){
   save();el.setAttribute('aria-pressed',String(liked));return;
 }
 if(k==='reelReport')return reportReel(clip(v));
+if(k==='reelSound'){
+  const watch=activeReelWatch;
+  if(watch?.id!==v)return;
+  const video=watch.video;
+  reelAudioEnabled=video.muted||video.volume===0;
+  if(reelAudioEnabled&&video.volume===0)video.volume=1;
+  video.muted=!reelAudioEnabled;
+  updateSoundButton(el.closest('.reel'),video);
+  if(video.paused)watch.play();
+  return;
+}
+if(k==='demoCreatorTrade')return openDemoCreatorTrade(chan(v),{now:el?.closest('.marketRow')?marketPaintedAt:undefined});
 if(k==='publishMoment')return publishSavedMoment(clip(v),momentFor(v,id),el);
 if(k==='tradeMoment'||k==='momentDetail'||k==='reelMoment'||k==='newMoment'){
   const reel=clip(v);
@@ -1424,7 +1589,7 @@ if(k==='tradeMoment'||k==='momentDetail'||k==='reelMoment'||k==='newMoment'){
       returnTo();
       [...$('#form').querySelectorAll('[data-act]')].find(button=>button.dataset.act===str)?.focus();
     }:undefined;
-    return openMomentTrade(reel,coin,{back});
+    return openMomentTrade(reel,coin,{back,now:el.closest('.marketRow')?marketPaintedAt:undefined});
   }
   if(k==='reelMoment'&&momentsFor(v).length>1)return openMomentPicker(reel);
   if(id&&!coin)return;
@@ -1435,6 +1600,11 @@ if(k==='reelShare')return shareReel(clip(v));if(k==='reelTrade')return openReelT
   exploreLimit=24;exploreTab=v;return go('Search');
 }if(k==='group'){marketGroup=v;return render();}
 
+if(k==='marketTime'||k==='marketSource'){
+  if(k==='marketTime'&&Object.hasOwn(marketWindows,v))marketRange=v;
+  if(k==='marketSource')useTestnetFills=v==='testnet';
+  render();document.querySelector('.marketControls [data-act="'+k+':'+v+'"]')?.focus({preventScroll:true});return;
+}
 if(k==='watch'){const list=s.watchlist||[];s.watchlist=list.includes(v)?list.filter(x=>x!==v):[...list,v];save();return render();}
 if(k==='create')return create();if(k==='channel')return channelForm('profile');if(k==='launch')return modal('<h2>Launch Channel coin</h2><p>Every video on your channel will link to this coin.</p><form id="launch"><label>Coin symbol (2–8 letters, A–Z)<input required pattern="[A-Za-z]{2,8}" name="symbol"></label><p>Choose a symbol, then open the market to register your coin with your wallet on BSC Testnet.</p><button class="primary">Confirm launch</button></form>');if(k==='toggle'){s[v]=s[v].includes(id)?s[v].filter(x=>x!==id):[...s[v],id];save();el.classList.toggle('selected',s[v].includes(id));el.setAttribute('aria-pressed',String(s[v].includes(id)));
 if(v==='likes'){const n=reelLikeCount(clip(id));el.querySelector('small').textContent=shortNumber.format(n);el.setAttribute('aria-label','Like · '+fmt(n));}
@@ -1476,7 +1646,7 @@ function updateVisibleData(){
       if(!clip(node.dataset.id)){if(node.contains(activeReelWatch?.video))activeReelWatch.video.pause();node.remove();continue;}
       updateReelSocial(node.dataset.id);
     }
-    const added=s.clips.filter(reel=>!root.querySelector('[data-id="'+CSS.escape(reel.id)+'"]'));
+    const added=feedItems(id).filter(reel=>!root.querySelector('[data-id="'+CSS.escape(reel.id)+'"]'));
     if(added.length){
       const fragment=document.createElement('template');fragment.innerHTML=feed(id);
       for(const reel of added){

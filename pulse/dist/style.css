@@ -168,13 +168,12 @@ main:has(.inboxConversation){flex:1;min-height:0;width:100%;max-width:620px;box-
 
 .demoLabel{display:inline-block;padding:2px 6px;border:1px solid #627047;border-radius:5px;background:#252d1d;color:#dfe9ce;font-size:10px;font-weight:650;vertical-align:middle}
 .reel .demoLabel{margin:3px 0;text-shadow:none}
-.demoActivity{padding:0 12px;margin-top:14px;border:1px solid #3a4033;border-radius:12px;background:#181c16}
-.demoActivity h2{display:flex;gap:8px;align-items:center;margin:12px 0 4px}
-.activityRow{display:grid;width:100%;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;text-align:left;padding:8px 0;background:none;border:0;color:inherit;border-radius:0}
-.activityRow+.activityRow{border-top:1px solid #343b2e}
-.activityRow time,.activityCopy small,.commentTime{color:#bbc4af;font-size:11px}
-.activityCopy{font-size:12px;overflow-wrap:anywhere}
-.activityCopy small{display:block;margin-top:2px}
+.trendingCreators{padding:0 12px;margin-top:14px;border:1px solid #3a4033;border-radius:12px;background:#181c16}
+.trendingCreators h2{margin:12px 0 4px}
+.trendingCreators .exploreRow:last-child{border-bottom:0}
+.commentTime{color:#bbc4af;font-size:11px}
+.reelSound{position:absolute;z-index:3;top:12px;right:12px;min-height:38px;padding:5px 11px;border-radius:999px;border:1px solid #ffffff4f;background:#15181bc9;color:#fff;font-size:12px}
+.reelSound[aria-pressed=true]{color:#d6fa44}
 .commentTime{margin-left:5px}
 
 .momentMarket{margin-top:24px}
@@ -209,9 +208,7 @@ dialog[open]:has(#momentTicket){background:#151815;border-color:#424b38}
 .momentAssetPrice small,.momentChartHeading small,.momentPlotScale,.momentPlotAxis,.momentTradeStats small{display:block;color:#b8c1ae;font-size:11px}
 .momentChart{margin:6px 0 12px;padding:0}
 .momentChartHeading,.momentPlotAxis{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.momentChartOptions{display:flex;gap:4px}
-.momentChartOptions button{border:0;padding:5px 8px;background:transparent;color:#b8c1ae;font-size:12px}
-.momentChartOptions button[aria-pressed=true]{background:#293621;color:#e2f4ad}
+.momentChartHeading strong{font-size:12px;color:#e2f4ad}
 .momentPlot{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:stretch}
 .momentPlot svg{display:block;width:100%;height:clamp(86px,17dvh,140px);overflow:visible}
 .momentPlotScale{display:grid;align-content:space-between;text-align:right;padding:8px 0;font-variant-numeric:tabular-nums}
@@ -236,9 +233,9 @@ dialog[open]:has(#momentTicket){background:#151815;border-color:#424b38}
 #momentTicket .bought{color:#95eda9;fill:#95eda9}
 #momentTicket .sold{color:#ffa4a5;fill:#ffa4a5}
 .momentTradeFooter{border-top:1px solid #353c30;margin-top:6px;padding-top:7px}
-#momentOrder label{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0}
-#momentOrder input{width:min(60%,160px);margin:0}
-.momentOrderActions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px}
+#momentOrder label{display:grid;gap:4px;margin:0;color:#b8c1ae;font-size:13px}
+#momentOrder input{width:100%;min-width:0;margin:0}
+.momentOrderActions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:9px}
 .momentOrderActions button{min-height:44px}
 .momentOrderPreview:not([hidden]){display:grid;gap:7px;margin-top:12px;padding:10px;border:1px solid #4c563d;border-radius:9px}
 .momentOrderPreview p,.momentTradeStatus{margin:0}
@@ -270,8 +267,11 @@ dialog[open]:has(#momentTicket){background:#151815;border-color:#424b38}
 .marketStats small{display:block;color:#aaaab2;font-size:11px}
 .marketStat b{display:block;margin-top:3px;font-size:13px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .marketDataStatus{grid-column:1/-1}
-.marketSpark svg{display:block;width:100%;height:25px}
+.marketSpark{color:#b7baae;min-width:0}
+.marketSpark svg{display:block;width:100%;height:34px}
 .marketSpark polyline{fill:none;stroke:currentColor;stroke-width:1.5;vector-effect:non-scaling-stroke}
+.marketSpark polygon{fill:currentColor;opacity:.15}
+.marketSpark circle{fill:currentColor}
 .marketStats .positive,.marketStats .positive small{color:#9de7ad}
 .marketStats .negative,.marketStats .negative small{color:#ff9caa}
 @media(max-width:1020px){
@@ -286,19 +286,11 @@ dialog[open]:has(#momentTicket){background:#151815;border-color:#424b38}
 }
 
 .marketHome .marketTabs{margin-bottom:16px;gap:clamp(8px,3vw,24px);flex-wrap:wrap}
+.marketControls{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:18px}
+.marketControls .viewTabs{flex-wrap:wrap;gap:4px;border:0;margin:0;overflow:visible}
+.marketControls .viewTabs button{min-width:42px;min-height:34px;padding:5px 9px;border:1px solid transparent;border-radius:7px;font-size:12px}
+.marketControls .viewTabs button[aria-pressed=true]{background:#282e1b;border-color:#46532b;color:#d6fa44}
 .marketHome .momentMarket{margin-top:0}
-.sampleTradeFeed{margin:16px 0 24px}
-.sampleTradeFeed h2{margin:0;font-size:19px}
-.sampleTradeFeed p{margin:5px 0 9px;color:#acacb4;font-size:12px}
-.sampleTradeFeed ol{list-style:none;margin:0;padding:0;border-bottom:1px solid #323237}
-.sampleTradeFeed li{display:grid;grid-template-columns:36px minmax(0,1fr) auto;align-items:center;gap:10px;border-top:1px solid #323237;padding:7px 0;font-size:13px}
-.sampleTradeFeed small,.sampleTradeFeed time{display:block;color:#acacb4;font-size:11px}
-.sampleTradeFeed summary{cursor:pointer}
-.sampleTradeFeed .buy{color:#9de7ad}
-.sampleTradeFeed .sell{color:#ff9caa}
-.sampleTradeIdentity{overflow-wrap:anywhere}
-.sampleTradeValue{text-align:right;font-variant-numeric:tabular-nums}
-details.sampleTradeFeed{margin:8px 0;font-size:13px}
 .momentDetailActions{display:flex;flex-wrap:wrap;gap:8px}
 .momentPicker{list-style:none;margin:12px 0;padding:0}
 .momentPicker li{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;border-top:1px solid #353c30;padding:9px 0}
@@ -332,8 +324,14 @@ code, pre, kbd, samp { font-family: Inter, sans-serif; }
 
 header .aboutLink{padding:6px 10px;border-radius:999px;color:#e7e7e5;font-size:13px;font-weight:650;white-space:nowrap}
 .aboutPulse h2{padding-right:44px}
-.aboutPulse dt{margin-top:12px;font-weight:700}
-.aboutPulse dd{margin:2px 0 0;color:#b8b8bd}
+.aboutPulse .viewTabs{margin:8px 0 16px}
+.aboutRates{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 16px}
+.aboutRates dt,.aboutRates dd{margin:0;padding:5px 0;border-bottom:1px solid #34343a}
+.aboutRates dd{text-align:right;font-weight:700}
+.portfolioBalance{margin:10px 0 3px}
+.portfolioPositions{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.portfolio #holdings{border-top:1px solid #34343a;margin-top:10px;padding-top:8px}
+.portfolio #holdings h3{margin:0 0 5px;font-size:14px}
 
 main a[href^="#"]{color:inherit;text-decoration:none}
 main a.primary{display:inline-flex;align-items:center;color:#141610}
