@@ -86,6 +86,7 @@ export const shared = client && {
     const [creators,videos]=await Promise.all([rows('pulse_creators',['id',id]),rows('pulse_videos',['creator_id',id])]);
     return {creators,videos:videos.sort((a,b)=>b.created_at.localeCompare(a.created_at))};
   },
+  creators: () => rows('pulse_creators', null, 'id,ticker,wallet'),
   async feed() {
     const [videos,creators]=await Promise.all([rows('pulse_videos'),rows('pulse_creators')]);
     return { creators, videos: videos.sort((a,b) => b.created_at.localeCompare(a.created_at)) };
@@ -109,6 +110,10 @@ export const shared = client && {
     if (error) throw error;
     if (owner !== userId) throw Error('Wallet changed. Sign in again.');
     await rpc('pulse_set_profile_photo');
+  },
+  async setProfileDetails(owner, bio, links) {
+    if (!userId || userId !== owner) throw Error('Sign in to edit this profile.');
+    await rpc('pulse_set_profile_details', { profile_owner: owner, profile_bio: bio, profile_links: links });
   },
   media(row) {
     return client.storage.from('pulse-videos').getPublicUrl(row.creator_id + '/' + row.id).data.publicUrl;
