@@ -95,6 +95,32 @@ async function priceHistory(root,key){
     drawPrices(root,values);root.append(node('small','Latest: '+values.at(-1)+' tBNB per coin · trades in the last 1,000 blocks'));
   }catch{root.replaceChildren(node('h3','Trade price'),node('p','Price history is unavailable.'));const retry=node('button','Retry chart');retry.onclick=()=>priceHistory(root,key);root.append(retry);}
 }
+async function marketSnapshot(creators){
+  const rows=new Map();
+  const blockTag=await reader.getBlockNumber();
+  const listedMarket=await ready();
+  const keys=creators.map(tokenId).filter(Boolean);
+  const logs=listedMarket&&keys.length
+    ?await marketRead.queryFilter(marketRead.filters.Trade(keys),Math.max(0,blockTag-999),blockTag)
+    :[];
+  await Promise.allSettled(creators.map(async creator=>{
+    const key=tokenId(creator);
+    if(!listedMarket||!key||!await marketRead.listed(key,{blockTag})){
+      rows.set(creator.id,{status:'Market not launched'});
+      return;
+    }
+    const [price,supply]=await Promise.all([
+      marketRead.quote(key,1,true,{blockTag}),
+      marketRead.supply(key,{blockTag})
+    ]);
+    const reserve=await marketRead.reserve(supply,{blockTag});
+    const fills=logs.filter(log=>log.args.id===BigInt(key)).map(({args})=>({
+      side:args.bought?'buy':'sell', amount:args.amount, quantity:args.quantity
+    }));
+    rows.set(creator.id,{price:formatEther(price),reserve:formatEther(reserve),fills,format:formatEther});
+  }));
+  return rows;
+}
 function panel(root,creator,side){
   const current=++version;
   const status=node('p',''),actions=node('div',''),info=node(root.id==='reelTicket'?'div':'p','');
@@ -177,4 +203,4 @@ function loginPage(root,complete){
   }
   root.append(status);
 }
-window.pulseWallet={panel,address,loginPage,signed,portfolio};
+window.pulseWallet={panel,address,loginPage,signed,portfolio,marketSnapshot};
