@@ -133,3 +133,16 @@ dialog[open]:has(#reelTicket,.commentsSheet){animation:pulseSheetUp .24s cubic-b
 .chatBubble{max-width:85%;white-space:pre-wrap;overflow-wrap:anywhere;background:#293820;color:#eefac9;border-radius:13px 13px 4px 13px;padding:8px 12px;margin:4px 0}
 .tradeSymbol{display:block;width:23px;height:23px;background:currentColor;mask-image:linear-gradient(#fff,#fff),url("media/trade.png");mask-size:100% 100%;mask-repeat:no-repeat;mask-mode:alpha,luminance;mask-composite:exclude}
 .dockIcon .tradeSymbol{width:19px;height:19px}
+
+.demoLabel{display:inline-block;padding:2px 6px;border:1px solid #627047;border-radius:5px;background:#252d1d;color:#dfe9ce;font-size:10px;font-weight:650;vertical-align:middle}
+.reel .demoLabel{margin:3px 0;text-shadow:none}
+.demoActivity{padding:0 12px;margin-top:14px;border:1px solid #3a4033;border-radius:12px;background:#181c16}
+.demoActivity h2{display:flex;gap:8px;align-items:center;margin:12px 0 4px}
+.activityRow{display:grid;width:100%;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;text-align:left;padding:8px 0;background:none;border:0;color:inherit;border-radius:0}
+.activityRow+.activityRow{border-top:1px solid #343b2e}
+.activityRow time,.activityCopy small,.commentTime{color:#bbc4af;font-size:11px}
+.activityCopy{font-size:12px;overflow-wrap:anywhere}
+.activityCopy small{display:block;margin-top:2px}
+.commentTime{margin-left:5px}
+.chatBubble.incoming{align-self:flex-start;border-radius:13px 13px 13px 4px;background:#252820;color:#e8ecdf}
+.chatBubble.incoming small{display:block;margin-bottom:3px;color:#bac4af}

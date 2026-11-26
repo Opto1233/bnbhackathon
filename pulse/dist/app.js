@@ -77,7 +77,8 @@ function exploreResults(){
   const visible=groups.filter(([id,,rows])=>rows.length&&(exploreTab==='all'||exploreTab===id));
   const hashtags=!q&&exploreTab==='all'?'<section class="exploreHashtags"><h2>Trending hashtags</h2><div>'+
     trendingHashtags().map(({name,reels})=>btn(esc(name)+'<small>'+reels+' '+(reels===1?'reel':'reels')+'</small>','hashtag:'+esc(name),'hashtag')).join('')+'</div></section>':'';
-  return hashtags+(visible.length ? visible.map(([,title,rows])=>'<section><h2>'+title+'</h2>'+rows.join('')+'</section>').join('')
+  const activity=!q&&exploreTab==='all'?'<section class="demoActivity" aria-labelledby="activityHeading"><h2 id="activityHeading">Recent activity <span class="demoLabel">Demo</span></h2><div id="activityRows">'+activityRows()+'</div></section>':'';
+  return activity+hashtags+(visible.length ? visible.map(([,title,rows])=>'<section><h2>'+title+'</h2>'+rows.join('')+'</section>').join('')
     : '<p class="emptyView">'+(q?'No results found.':'Nothing to explore here yet.')+'</p>');
 }
 function search(section){
@@ -103,11 +104,70 @@ function reelIcon(kind){
   if(kind==='trade')return tradeSymbol;
   return '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="'+socialIcons[kind]+'"/></svg>';
 }
-function reelComments(id){return s.comments?.[id]||[];}
+const demoStartedAt=Date.now();
+let demoElapsed=0;
+const demoConversation=[
+  ['1','Mina','That street looks completely different after dark.',-720],
+  ['reaction','Jay','The face at 0:03 when the timer hits zero 😭',-510],
+  ['2','Nara','That wave was worth the wait.',-410],
+  ['kimchi','Pim','The chopsticks at the end make this so satisfying.',-320],
+  ['3','June','That transition landed right on the beat.',-240],
+  ['myth','Arun','The green glow when the mask appears is my favorite part.',-175],
+  ['4','Mina','There is no such thing as too much cheese.',-105],
+  ['bot','Jay','Tiny bot has better timing than me.',-42],
+  ['kimchi','June','The color palette on this one is so good.',18],
+  ['reaction','Pim','I had to replay the last second.',36],
+  ['bot','Nara','The little wave at the end 👋',54]
+].map(([reel,author,text,offset],index)=>({reel,author,text,offset,id:'demo-'+index,demo:true,time:demoStartedAt+offset*1000}));
+const demoInbox={
+  bot:{text:'Hey! What should Tiny Bot try in the next reel?',offset:-180},
+  kimchi:{text:'Thanks for watching Kimchi Crunch! What should we cook next?',offset:-900}
+};
+const demoShortLikes={reaction:326,kimchi:189,myth:172,bot:146};
+function reelLikeCount(reel){
+  return (demoShortLikes[reel.id]??reel.likes)+Number(s.likes.includes(reel.id));
+}
+const shortNumber=new Intl.NumberFormat('en-US',{notation:'compact',maximumFractionDigits:1});
+function recentDemoComments(){
+  return demoConversation.filter(row=>row.offset<=demoElapsed);
+}
+function demoReel(id){return demoConversation.some(row=>row.reel===id);}
+function minutesAgo(time){
+  const seconds=Math.max(0,Math.floor((Date.now()-time)/1000));
+  return seconds<60?'Just now':seconds<3600?Math.floor(seconds/60)+'m ago':Math.floor(seconds/3600)+'h ago';
+}
+function activityRows(){
+  return recentDemoComments().slice(-3).reverse().map(({reel,author,text,time})=>{
+    const item=clip(reel);
+    return item?link('<span class="socialAvatar">'+esc(author[0])+'</span><span class="activityCopy"><strong>'+esc(author)+'</strong> commented on <b>'+esc(item.title)+'</b><small>'+esc(text)+'</small></span><time datetime="'+new Date(time).toISOString()+'">'+minutesAgo(time)+'</time>','Clips/'+reel,'activityRow'):'';
+  }).join('');
+}
+function tickDemoActivity(){
+  if(document.hidden)return;
+  demoElapsed++;
+  if(!demoConversation.some(row=>row.offset===demoElapsed))return;
+  const activity=$('#activityRows');
+  if(activity&&!activity.contains(document.activeElement))activity.innerHTML=activityRows();
+  for(const {reel} of demoConversation.filter(row=>row.offset===demoElapsed))updateCommentCount(reel);
+}
+const demoTimer=setInterval(()=>{
+  tickDemoActivity();
+  if(demoElapsed>=54)clearInterval(demoTimer);
+},1000);
+function reelComments(id){
+  const local=s.comments?.[id]||[];
+  const samples=demoConversation.filter(row=>row.reel===id&&(row.offset<=demoElapsed||local.some(reply=>reply.reply===row.id)||s.demoCommentLikes?.includes(row.id)))
+    .map(row=>({...row,liked:!!s.demoCommentLikes?.includes(row.id)}));
+  return [...samples,...local];
+}
+function updateCommentCount(id){
+  const counter=$('.reel[data-id="'+CSS.escape(id)+'"] [data-act^="comments:"] small');
+  if(counter)counter.textContent=fmt(reelComments(id).length);
+}
 function showComments(reel,replyId=''){
   if(!reel)return;
   const comments=reelComments(reel.id),reply=comments.find(item=>item.id===replyId);
-  const entry=comment=>'<article class="socialComment'+(comment.reply?' reply':'')+'"><span class="socialAvatar">'+esc(comment.author[0])+'</span><div><strong>'+esc(comment.author)+'</strong><p>'+esc(comment.text)+'</p>'+
+  const entry=comment=>'<article class="socialComment'+(comment.reply?' reply':'')+'"><span class="socialAvatar">'+esc(comment.author[0])+'</span><div><strong>'+esc(comment.author)+'</strong>'+(comment.demo?'<small class="commentTime">'+minutesAgo(comment.time)+' · Demo</small>':'')+'<p>'+esc(comment.text)+'</p>'+
     (!comment.reply?btn('Reply','reply:'+reel.id+':'+comment.id,'subtle'):'')+'</div>'+
     '<button type="button" class="subtle commentHeart" aria-label="Like comment" aria-pressed="'+!!comment.liked+'" data-act="commentLike:'+esc(reel.id)+':'+esc(comment.id)+'">'+reelIcon('like')+'</button></article>';
   const rows=comments.filter(item=>!item.reply).map(item=>entry(item)+comments.filter(child=>child.reply===item.id).map(entry).join('')).join('');
@@ -129,14 +189,17 @@ function reportReel(reel){
 }
 function inbox(id){
   const contacts=s.channels.filter(c=>c.id!=='me'),person=contacts.find(c=>c.id===id);
-  const messages=contact=>s.messages?.[contact.id]||[];
+  const messages=contact=>{
+    const sample=demoInbox[contact.id];
+    return [...(sample?[{text:sample.text,time:demoStartedAt+sample.offset*1000,incoming:true}]:[]),...(s.messages?.[contact.id]||[])];
+  };
   const people=contacts.slice().sort((a,b)=>(messages(b).at(-1)?.time||0)-(messages(a).at(-1)?.time||0));
   const avatar=c=>'<span class="socialAvatar">'+esc(c.name[0])+'</span>';
   if(!person)return '<section class="inboxPage"><h1>Inbox</h1><p class="muted">Demo chats · saved on this device</p><div class="inboxPeople">'+people.map(c=>
     link(avatar(c)+'<span><strong>'+esc(c.name)+'</strong><small>'+esc(messages(c).at(-1)?.text||'Start a conversation')+'</small></span>','Inbox/'+c.id,'inboxPerson')
   ).join('')+'</div></section>';
   return '<section class="inboxPage"><div class="inboxTop">'+link('‹ Inbox','Inbox','subtle')+avatar(person)+'<h1>'+esc(person.name)+'</h1></div><p class="muted">Demo chat · saved on this device</p>'+
-    '<div class="inboxThread" aria-live="polite">'+(messages(person).length?messages(person).map(msg=>'<p class="chatBubble">'+esc(msg.text)+'</p>').join(''):'<p class="emptyView">Start a demo chat with '+esc(person.name)+'.</p>')+'</div>'+
+    '<div class="inboxThread" aria-live="polite">'+(messages(person).length?messages(person).map(msg=>'<p class="chatBubble'+(msg.incoming?' incoming':'')+'">'+(msg.incoming?'<small>Demo · '+minutesAgo(msg.time)+'</small>':'')+esc(msg.text)+'</p>').join(''):'<p class="emptyView">Start a demo chat with '+esc(person.name)+'.</p>')+'</div>'+
     '<form id="inboxMessage" class="socialComposer" data-person="'+esc(person.id)+'"><input name="text" aria-label="Message" placeholder="Write a message…" maxlength="500" required><button class="primary">Send</button></form></section>';
 }
 function submitSocial(form,data){
@@ -145,10 +208,9 @@ function submitSocial(form,data){
     const reel=clip(form.dataset.reel);
     if(!reel||!text)return;
     const comments=(s.comments??={})[reel.id]??=[];
-    comments.push({id:crypto.randomUUID(),author:self()?.name||'You',text,reply:comments.some(row=>row.id===form.dataset.reply&&!row.reply)?form.dataset.reply:''});
+    comments.push({id:crypto.randomUUID(),author:self()?.name||'You',text,reply:reelComments(reel.id).some(row=>row.id===form.dataset.reply&&!row.reply)?form.dataset.reply:''});
     save();showComments(reel);
-    const counter=$('.reel[data-id="'+CSS.escape(reel.id)+'"] [data-act^="comments:"] small');
-    if(counter)counter.textContent=fmt(comments.length);
+    updateCommentCount(reel.id);
   }else if(form.id==='reelReport'){
     const reel=clip(form.dataset.reel),reason=data.get('reason');
     if(!reel||!['Spam','Harassment','Other'].includes(reason))return;
@@ -163,14 +225,14 @@ function submitSocial(form,data){
   }
 }
 function reelActions(c){
-  function control(label,icon,act,{pressed=null,count=null,showLabel=false}={}){
+  function control(label,icon,act,{pressed=null,count=null,showLabel=false,compact=false}={}){
     const state=pressed===null?'':' aria-pressed="'+pressed+'"';
     return '<button type="button" class="railAction '+(showLabel?'reelTrade':'reelIconAction')+'" data-act="'+esc(act)+'" aria-label="'+label+'" title="'+label+'"'+state+'>'+
-      reelIcon(icon)+(showLabel?label:'')+(count===null?'':'<small>'+fmt(count)+'</small>')+'</button>';
+      reelIcon(icon)+(showLabel?label:'')+(count===null?'':'<small>'+(compact?shortNumber.format(count):fmt(count))+'</small>')+'</button>';
   }
   const actions=[];
   actions.push(control('Trade','trade','reelTrade:'+c.id,{showLabel:true}));
-  actions.push(control('Like','like','toggle:likes:'+c.id,{pressed:s.likes.includes(c.id)}));
+  actions.push(control('Like','like','toggle:likes:'+c.id,{pressed:s.likes.includes(c.id),count:reelLikeCount(c),compact:true}));
   actions.push(control('Comments','comments','comments:'+c.id,{count:reelComments(c.id).length}));
   actions.push(control('Save','save','toggle:saves:'+c.id,{pressed:s.saves.includes(c.id)}));
   actions.push(control('Repost','repost','toggle:reposts:'+c.id,{pressed:s.reposts.includes(c.id)}));
@@ -190,7 +252,7 @@ function feed(id){
     const coin=ch.coin?link('$'+esc(ch.coin),'Trading/'+ch.id,'coinPill'):'';
     return '<article class="reel" data-id="'+c.id+'"'+backdrop+'><video playsinline muted loop controls '+media+'></video>'+caption+
       '<button type="button" class="momentGesture" aria-label="Hold to create Moment Coin" title="Hold to create Moment Coin"></button>'+
-      '<div class="controls"><div class="byline">'+link(esc(ch.name),'Profile/'+ch.id)+coin+'</div><h3>'+esc(c.title)+'</h3>'+(hashtags?'<div class="reelHashtags">'+hashtags+'</div>':'')+'</div>'+reelActions(c)+'</article>';
+      '<div class="controls"><div class="byline">'+link(esc(ch.name),'Profile/'+ch.id)+coin+'</div><h3>'+esc(c.title)+'</h3>'+(demoReel(c.id)?'<span class="demoLabel">Demo activity</span>':'')+(hashtags?'<div class="reelHashtags">'+hashtags+'</div>':'')+'</div>'+reelActions(c)+'</article>';
   }).join('')+'</div>';
 }
 function observe(){observer?.disconnect();const root=$('.feed');if(!root)return;observer=new IntersectionObserver(entries=>entries.forEach(e=>{let v=e.target.querySelector('video');if(e.isIntersecting){v.play().catch(()=>{});let c=clip(e.target.dataset.id);c.views.push([Date.now(),last(c.views)+1]);save();}else v.pause();}),{root,threshold:.65});root.querySelectorAll('article').forEach(el=>observer.observe(el));}
@@ -261,7 +323,7 @@ function profile(id='me'){
   const owned=s.clips.filter(reel=>reel.owner===id);
   const items=mine&&tab?s.clips.filter(reel=>s[['','reposts','likes','saves'][tab]].includes(reel.id)):owned;
   const name=channel?.name||'My profile', handle=channel?.name.toLowerCase().replaceAll(/[^\p{L}\p{N}]+/gu,'_').replace(/^_|_$/g,'');
-  const likes=owned.reduce((total,reel)=>total+reel.likes+Number(s.likes.includes(reel.id)),0);
+  const likes=owned.reduce((total,reel)=>total+reelLikeCount(reel),0);
   const action=!channel?btn('Create channel','channel','primary'):channel.coin?link('Trade $'+esc(channel.coin),'Trading/'+channel.id,'primary'):mine?btn('Launch channel coin','launch','primary'):'';
   const avatar=id!=='me'&&owned.length?' style="'+image(owned[0])+'"':'';
   const stats=[['Following',channel?.following||0],['Followers',last(channel?.followers||[])],['Likes',likes]];
@@ -441,7 +503,12 @@ if(k==='comments'||k==='reply')return showComments(clip(v),id);
 if(k==='commentLike'){
   const comment=reelComments(v).find(item=>item.id===id);
   if(!comment)return;
-  comment.liked=!comment.liked;save();el.setAttribute('aria-pressed',String(comment.liked));return;
+  const liked=!comment.liked;
+  if(comment.demo){
+    const likes=s.demoCommentLikes||[];
+    s.demoCommentLikes=liked?[...likes,id]:likes.filter(key=>key!==id);
+  }else comment.liked=liked;
+  save();el.setAttribute('aria-pressed',String(liked));return;
 }
 if(k==='reelReport')return reportReel(clip(v));
 if(k==='reelShare')return shareReel(clip(v));if(k==='reelTrade')return openReelTrade(clip(v),el.closest('.reel')?.querySelector('video'));if(k==='explore'){
@@ -450,7 +517,9 @@ if(k==='reelShare')return shareReel(clip(v));if(k==='reelTrade')return openReelT
 }if(k==='group'){marketGroup=v;return render();}
 
 if(k==='watch'){const list=s.watchlist||[];s.watchlist=list.includes(v)?list.filter(x=>x!==v):[...list,v];save();return render();}
-if(k==='create')return create();if(k==='channel')return channelForm('profile');if(k==='launch')return modal('<h2>Launch Channel coin</h2><p>Every reel on your channel will link to this coin.</p><form id="launch"><label>Coin symbol (2–8 letters, A–Z)<input required pattern="[A-Za-z]{2,8}" name="symbol"></label><p>Choose a symbol, then open the market to register your coin with your wallet on BSC Testnet.</p><button class="primary">Confirm launch</button></form>');if(k==='toggle'){s[v]=s[v].includes(id)?s[v].filter(x=>x!==id):[...s[v],id];save();el.classList.toggle('selected',s[v].includes(id));el.setAttribute('aria-pressed',String(s[v].includes(id)));return;}if(k==='category'){category=+v;metric=0;}if(k==='metric')metric=+v;if(k==='range')period=+v;if(k==='tab')tab=+v;if(k==='side')side=v;render();}
+if(k==='create')return create();if(k==='channel')return channelForm('profile');if(k==='launch')return modal('<h2>Launch Channel coin</h2><p>Every reel on your channel will link to this coin.</p><form id="launch"><label>Coin symbol (2–8 letters, A–Z)<input required pattern="[A-Za-z]{2,8}" name="symbol"></label><p>Choose a symbol, then open the market to register your coin with your wallet on BSC Testnet.</p><button class="primary">Confirm launch</button></form>');if(k==='toggle'){s[v]=s[v].includes(id)?s[v].filter(x=>x!==id):[...s[v],id];save();el.classList.toggle('selected',s[v].includes(id));el.setAttribute('aria-pressed',String(s[v].includes(id)));
+if(v==='likes')el.querySelector('small').textContent=shortNumber.format(reelLikeCount(clip(id)));
+return;}if(k==='category'){category=+v;metric=0;}if(k==='metric')metric=+v;if(k==='range')period=+v;if(k==='tab')tab=+v;if(k==='side')side=v;render();}
 document.addEventListener('click',e=>{
   const center=e.target.closest('.momentGesture');
   if(center){
