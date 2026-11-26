@@ -293,7 +293,7 @@ function marketAge(timestamp){
   if(minutes<1440)return Math.floor(minutes/60)+'h';
   return Math.floor(minutes/1440)+'d';
 }
-function marketStats({price,marketCap,holders,top10,fills,format}){
+function marketStats({marketCap,holders,top10,fills,format}){
   const prices=fills.map(fill=>Number(format(BigInt(fill.amount)/BigInt(fill.quantity))));
   const first=prices[0], lastPrice=prices.at(-1);
   const change=prices.length>1&&first>0?(lastPrice-first)/first*100:null;
@@ -302,18 +302,18 @@ function marketStats({price,marketCap,holders,top10,fills,format}){
   if(change!==null){
     const low=Math.min(...prices), span=Math.max(...prices)-low;
     const points=prices.map((value,i)=>[2+96*i/(prices.length-1),span?30-28*(value-low)/span:16]);
-    chart='<svg viewBox="0 0 100 32" preserveAspectRatio="none" role="img" aria-label="Recent fill prices"><polyline points="'+points.join(' ')+'"/></svg>'+
-      '<small title="Change from first to latest fill">'+(change>0?'+':'')+change.toFixed(2)+'%</small>';
+    chart='<svg viewBox="0 0 100 32" preserveAspectRatio="none" role="img" aria-label="Recent fill prices"><polyline points="'+points.join(' ')+'"/></svg>';
   }
   const stat=(label,value)=>'<span class="marketStat"><small>'+label+'</small><b>'+value+'</b></span>';
   const volume=fills.reduce((sum,fill)=>sum+BigInt(fill.amount),0n);
   const buys=fills.filter(fill=>fill.side==='buy').length;
   const bnb=value=>value.replace(/(\.\d*?[1-9])0+$/,'$1').replace(/\.0+$/,'')+' tBNB';
-  return '<div class="marketNumbers">'+stat('Price',bnb(price))+
-    '<span class="marketSpark '+tone+'">'+chart+'</span>'+
-    stat('Market cap',bnb(marketCap))+stat('DEX liquidity','<span title="No DEX pool">—</span>')+
-    stat('Volume',bnb(format(volume)))+
-    stat('Transactions',fmt(fills.length)+' <small><span class="positive" title="Buys">'+fmt(buys)+' B</span> / <span class="negative" title="Sells">'+fmt(fills.length-buys)+' S</span></small>')+
+  const changeLabel=change===null?'':'<small class="'+tone+'" title="Fill price change from first to latest trade">'+
+    (change>0?'+':'')+change.toFixed(2)+'%</small>';
+  return '<div class="marketNumbers"><span class="marketSpark '+tone+'">'+chart+'</span>'+
+    '<div class="marketCap">'+stat('Market cap',bnb(marketCap))+changeLabel+'</div>'+
+    stat('Liquidity','<span title="No DEX pool">—</span>')+stat('Volume',bnb(format(volume)))+
+    stat('TXNs',fmt(fills.length)+' <small><span class="positive" title="Buys">'+fmt(buys)+' B</span> / <span class="negative" title="Sells">'+fmt(fills.length-buys)+' S</span></small>')+
     '</div>'+marketAudit(holders,top10);
 }
 function marketRow({name,detail,art,key,action,stats,creatorId,age,views}){
@@ -337,8 +337,7 @@ function momentMarket(){
         name:coin.name,detail:esc(reel.title)+' · '+momentTime(coin.time)+' · '+esc(coin.launcher||'You'),
         art:image(reel),key:'moment-'+reel.id,views:last(reel.views),
         age:coin.createdAt||(coin.offset?demoStartedAt+coin.offset*1000:null),action:btn('Trade','tradeMoment:'+esc(reel.id),'marketTrade'),
-        stats:marketStats({price:momentBNB(momentPrice(position.sold)),
-          marketCap:momentBNB(momentPrice(position.sold)*BigInt(position.sold)),
+        stats:marketStats({marketCap:momentBNB(momentPrice(position.sold)*BigInt(position.sold)),
           holders:position.owned>0?1:0,top10:position.owned>0?'100%':null,
           fills:position.fills||[],format:momentBNB})
       });

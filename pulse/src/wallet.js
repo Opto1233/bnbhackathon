@@ -116,7 +116,7 @@ async function marketSnapshot(creators){
     const fills=logs.filter(log=>log.args.id===BigInt(key)).map(({args})=>({
       side:args.bought?'buy':'sell', amount:args.amount, quantity:args.quantity
     }));
-    rows.set(creator.id,{price:formatEther(price),marketCap:formatEther(price*supply),holders:supply<=1n?Number(supply):null,top10:supply>0n&&supply<=10n?'100%':null,fills,format:formatEther});
+    rows.set(creator.id,{marketCap:formatEther(price*supply),holders:supply<=1n?Number(supply):null,top10:supply>0n&&supply<=10n?'100%':null,fills,format:formatEther});
   }));
   return rows;
 }
