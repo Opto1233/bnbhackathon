@@ -110,7 +110,8 @@ dialog:has(#reelTicket,#momentTicket,.momentSheet) .close{z-index:2}
 .momentStatus:empty{display:none}
 
 .exploreHashtags > div,.reelHashtags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
-.hashtag{border-radius:10px;color:#e1f4b7;background:#222819;font-size:13px}
+.exploreHashtags > div{column-gap:20px;row-gap:12px}
+.hashtag{border:0;border-radius:0;background:transparent;padding:4px 0;color:#e1f4b7;font-size:13px;text-align:left}
 .hashtag small{display:block;color:#b9bda9;font-size:11px;text-align:left}
 .reelHashtags{margin-top:2px}
 .reelHashtag,.subtle{border:0;background:none;padding:2px 0;color:#d6fa44;font-size:12px}
