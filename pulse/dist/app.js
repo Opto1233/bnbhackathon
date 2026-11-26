@@ -559,6 +559,13 @@ function momentFillList(fills){
 function openMomentTrade(reel,coin=momentFor(reel?.id),view='curve'){
   if(!coin)return;
   const coinId=coin.id||reel.id;
+  const coins=momentsFor(reel.id);
+  const switcher=coins.length>1?'<label class="momentCoinSwitcher">Switch coin <select id="momentCoinSelect">'+
+    coins.map(option=>{
+      const id=option.id||reel.id;
+      return '<option value="'+esc(id)+'"'+(id===coinId?' selected':'')+'>'+
+        esc(option.name)+' · '+momentTime(option.time)+'</option>';
+    }).join('')+'</select></label>':'';
   const ledger=momentLedger(), position=momentPosition(ledger,coinId);
   const reserve=momentReserve(position.sold);
   const complete=position.sold===momentCurveCap;
@@ -567,7 +574,7 @@ function openMomentTrade(reel,coin=momentFor(reel?.id),view='curve'){
   modal('<section id="momentTicket" aria-label="Moment Coin trading">'+
     '<div class="momentMarketHeader"><span class="momentLauncherAvatar" aria-hidden="true">'+esc((coin.launcher||'You')[0])+'</span><strong>'+launcher+'</strong><span class="demoLabel">Demo</span></div>'+
     '<div class="momentAsset"><span class="momentAssetArt" aria-hidden="true" style="'+imageStyle+'">'+(imageStyle?'':esc(coin.name[0]))+'</span>'+
-    '<div class="momentAssetMeta"><h2>'+label+'</h2>'+btn(esc(reel.title)+' ↗',momentAction('momentDetail',reel,coin),'subtle')+'</div>'+
+    '<div class="momentAssetMeta"><h2>'+label+'</h2>'+btn(esc(reel.title)+' ↗',momentAction('momentDetail',reel,coin),'subtle')+switcher+'</div>'+
     '<div class="momentAssetPrice"><strong>'+price+'</strong><small>tBNB per coin</small></div></div>'+
     '<div class="momentChart"><div class="momentChartHeading"><div class="momentChartOptions" role="group" aria-label="Price chart">'+
     '<button type="button" data-chart="curve" aria-pressed="'+(view==='curve')+'">Curve</button><button type="button" data-chart="fills" aria-pressed="'+(view==='fills')+'">Trade prices</button></div><small>tBNB</small></div>'+
@@ -580,6 +587,13 @@ function openMomentTrade(reel,coin=momentFor(reel?.id),view='curve'){
       '<form id="momentOrder"><label>Quantity <input name="quantity" type="number" min="1" max="1000000" step="1" value="100000" required></label>'+
       '<div class="momentOrderActions"><button class="tradeBuy" type="submit" value="buy">Buy</button><button class="tradeSell" type="submit" value="sell">Sell</button></div></form>'+
       '<div class="momentOrderPreview" hidden></div>')+'<p class="momentTradeStatus" role="status"></p></div></section>');
+  const select=$('#momentCoinSelect');
+  select?.addEventListener('change',()=>{
+    const next=momentFor(reel.id,select.value);
+    if(!next||next===coin)return;
+    openMomentTrade(reel,next,view);
+    $('#momentCoinSelect')?.focus({preventScroll:true});
+  });
   const chartButtons=$('#momentTicket').querySelectorAll('[data-chart]');
   for(const button of chartButtons)button.onclick=()=>{
     view=button.dataset.chart;

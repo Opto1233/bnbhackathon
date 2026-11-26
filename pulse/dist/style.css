@@ -262,3 +262,6 @@ dialog[open]:has(#momentTicket){background:#151815;border-color:#424b38}
 .momentPicker{list-style:none;margin:12px 0;padding:0}
 .momentPicker li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;border-top:1px solid #353c30;padding:9px 0}
 .momentPicker li .subtle{text-align:left;overflow-wrap:anywhere}
+
+.momentAssetMeta .momentCoinSwitcher{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;margin:5px 0 0;color:#b8c1ae;font-size:12px}
+.momentCoinSwitcher select{width:auto;max-width:100%;min-width:0;min-height:36px;margin:0;padding:4px 8px;color:#edf1e5;background:#242b20;border-color:#414b36;font-size:13px;text-overflow:ellipsis}
