@@ -1,5 +1,5 @@
 'use strict';
-const $=q=>document.querySelector(q), pages=['Login','Trending','Search','Clips','Trading','Profile'], day=86400000, fmt=n=>Number(n).toLocaleString('en-US',{maximumFractionDigits:2}), esc=s=>String(s).replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
+const $=q=>document.querySelector(q), pages=['Login','Trending','Search','Clips','Trading','Inbox','Profile'], day=86400000, fmt=n=>Number(n).toLocaleString('en-US',{maximumFractionDigits:2}), esc=s=>String(s).replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
 const epoch=Date.now(), names=['Tokyo Afterhours','Ocean Motion','Stereo Club','Pasta Studio'], titles=['When I text “almost there”','Trying to make it to Friday','When they hand me the aux','My definition of a little cheese'], tags=['NEON','WAVE','BEAT','PASTA'];
 function hist(total,i){return [35,30,7,1,.7,.4,.15,0].map((d,j)=>[epoch-day*d,Math.round(total*[.02,.08,.22,.42,.48,.56,.86,1][j])]);}
 function seed(){let channels=names.map((name,i)=>({id:String(i+1),name,coin:tags[i],prices:hist([4.8,3.2,2.1,1.6][i]*100,i).map(([t,v])=>[t,v/100]),supply:1000000,followers:hist(38000/(i+1),i),following:16+i}));return {channels,clips:titles.map((title,i)=>({id:String(i+1),owner:String(i+1),title,views:hist([248600,142800,86400,47200][i],i),likes:4200-i*800})),cash:10000,hold:{},closed:channels.map((c,i)=>({owner:c.id,t:epoch-day*.4,pnl:1200-i*310})),likes:[],saves:[],reposts:[]};}
@@ -8,6 +8,36 @@ const punchlines=['Still looking for the station.','Monday has entered the chat.
 for(const c of s.clips){
   const index=Number(c.id)-1;
   if(c.owner===c.id && titles[index]) c.title=titles[index];
+}
+const demoShorts=[
+  ['reaction','Pulse Arcade','The last second','#StreamerReaction','#Gaming'],
+  ['kimchi','Pulse Kitchen','Kimchi crunch','#Kimchi','#Food'],
+  ['myth','Pulse Lore','The trickster','#MythologyEdit','#NorseLore'],
+  ['bot','Pulse Workshop','Tiny bot, big plans','#LittleBot','#Robotics']
+];
+const classicHashtags=[['#StreetLife','#CityNights'],['#Surfing','#Outdoors'],['#DJSet','#Music'],['#Cooking','#Food']];
+for(const [index,[id,name,title,...hashtags]] of demoShorts.entries()){
+  if(!s.channels.some(channel=>channel.id===id))s.channels.push({id,name,followers:[],following:0});
+  if(!s.clips.some(reel=>reel.id===id)){
+    const position=s.clips.findIndex(reel=>reel.id===String(index+1));
+    s.clips.splice(position+1,0,{id,owner:id,title,hashtags,views:hist(13800-index*1600,index),likes:0});
+  }
+}
+function reelHashtags(reel){
+  return reel.hashtags||classicHashtags[Number(reel.id)-1]||reel.title.match(/#[\p{L}\p{N}_]+/gu)||[];
+}
+function trendingHashtags(){
+  const since=Date.now()-day, tags=new Map();
+  for(const reel of s.clips){
+    const unique=new Map(reelHashtags(reel).map(name=>[name.toLowerCase(),name]));
+    for(const [tag,name] of unique){
+      const item=tags.get(tag)||{name,views:0,reels:0};
+      item.views+=stats(reel.views,since).delta;
+      item.reels++;
+      tags.set(tag,item);
+    }
+  }
+  return [...tags.values()].sort((a,b)=>b.views-a.views||a.name.localeCompare(b.name)).slice(0,8);
 }
 const priceText=n=>Number(n).toLocaleString('en-US',{maximumFractionDigits:6});
 const save=()=>localStorage.setItem('pulse-demo-v1',JSON.stringify(s)),chan=id=>s.channels.find(c=>c.id===id), clip=id=>s.clips.find(c=>c.id===id), self=()=>chan('me'),last=a=>a.at(-1)?.[1]||0, cut=()=>period===3?-Infinity:Date.now()-[1,7,30][period]*day, pnl=id=>s.closed.filter(x=>x.owner===id&&x.t>=cut()).reduce((a,b)=>a+b.pnl,0);
@@ -32,7 +62,7 @@ function reelThumb(reel, className=''){
 let exploreTab='all';
 function exploreResults(){
   const q=query.trim().toLowerCase(), matches=(...values)=>values.some(value=>String(value||'').toLowerCase().includes(q));
-  const reels=s.clips.filter(c=>matches(c.title,chan(c.owner)?.name,chan(c.owner)?.coin? '$'+chan(c.owner).coin : ''))
+  const reels=s.clips.filter(c=>matches(c.title,chan(c.owner)?.name,chan(c.owner)?.coin? '$'+chan(c.owner).coin : '',...reelHashtags(c)))
     .sort((a,b)=>stats(b.views,Date.now()-day).delta-stats(a.views,Date.now()-day).delta);
   const channels=s.channels.filter(c=>matches(c.name,c.coin&&'$'+c.coin));
   const groups=[
@@ -45,8 +75,10 @@ function exploreResults(){
     ['coins','Creator coins',channels.filter(c=>c.coin).map(c=>'<div class="exploreRow">'+link('<strong>$'+esc(c.coin)+'</strong><small>'+esc(c.name)+'</small>','Trading/'+c.id,'exploreTitle')+'</div>')]
   ];
   const visible=groups.filter(([id,,rows])=>rows.length&&(exploreTab==='all'||exploreTab===id));
-  return visible.length ? visible.map(([,title,rows])=>'<section><h2>'+title+'</h2>'+rows.join('')+'</section>').join('')
-    : '<p class="emptyView">'+(q?'No results found.':'Nothing to explore here yet.')+'</p>';
+  const hashtags=!q&&exploreTab==='all'?'<section class="exploreHashtags"><h2>Trending hashtags</h2><div>'+
+    trendingHashtags().map(({name,reels})=>btn(esc(name)+'<small>'+reels+' '+(reels===1?'reel':'reels')+'</small>','hashtag:'+esc(name),'hashtag')).join('')+'</div></section>':'';
+  return hashtags+(visible.length ? visible.map(([,title,rows])=>'<section><h2>'+title+'</h2>'+rows.join('')+'</section>').join('')
+    : '<p class="emptyView">'+(q?'No results found.':'Nothing to explore here yet.')+'</p>');
 }
 function search(section){
   const showLeaderboard=section==='Leaderboard';
@@ -54,37 +86,119 @@ function search(section){
     ['all','For you'],['reels','Reels'],['channels','Channels'],['traders','Traders'],['coins','Coins'],['leaderboard','Leaderboard']
   ],showLeaderboard?'leaderboard':exploreTab,'explore');
   const content=showLeaderboard?ranks():
-    '<label class="exploreField"><span aria-hidden="true">⌕</span><input id="search" type="search" aria-label="Search Pulse" placeholder="Search reels, channels, traders, or coins" value="'+esc(query)+'"></label>'+
+    '<label class="exploreField"><span aria-hidden="true">⌕</span><input id="search" type="search" aria-label="Search Pulse" placeholder="Search reels, hashtags, channels, or coins" value="'+esc(query)+'"></label>'+
     '<div id="exploreResults">'+exploreResults()+'</div>';
   return '<div class="discovery"><h1>Explore</h1>'+tabs+content+'</div>';
 }
+const socialIcons={
+  trade:'M3 8h17l-4-4 M21 16H4l4 4',
+  like:'M12 21S3 16 3 9a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 7-9 12-9 12Z',
+  comments:'M21 11a8.5 8.5 0 0 1-8.5 8.5 10 10 0 0 1-3.5-.7L4 21l1.2-4.5A8.5 8.5 0 1 1 21 11Z M8 11h.1m4 0h.1m4 0h.1',
+  save:'M6 3h12v18l-6-4-6 4z',
+  report:'M5 21V4c4-4 10 3 14 0v10c-4 3-10-4-14 0',
+  repost:'M4 10V6h15l-3-3 M20 14v4H5l3 3',
+  share:'M12 15V3m-4 4 4-4 4 4 M5 11v9h14v-9',
+  tweet:'M4 3h4l12 18h-4z M20 3 4 21'
+};
+function reelIcon(kind){
+  return '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="'+socialIcons[kind]+'"/></svg>';
+}
+function reelComments(id){return s.comments?.[id]||[];}
+function showComments(reel,replyId=''){
+  if(!reel)return;
+  const comments=reelComments(reel.id),reply=comments.find(item=>item.id===replyId);
+  const entry=comment=>'<article class="socialComment'+(comment.reply?' reply':'')+'"><span class="socialAvatar">'+esc(comment.author[0])+'</span><div><strong>'+esc(comment.author)+'</strong><p>'+esc(comment.text)+'</p>'+
+    (!comment.reply?btn('Reply','reply:'+reel.id+':'+comment.id,'subtle'):'')+'</div>'+
+    '<button type="button" class="subtle commentHeart" aria-label="Like comment" aria-pressed="'+!!comment.liked+'" data-act="commentLike:'+esc(reel.id)+':'+esc(comment.id)+'">'+reelIcon('like')+'</button></article>';
+  const rows=comments.filter(item=>!item.reply).map(item=>entry(item)+comments.filter(child=>child.reply===item.id).map(entry).join('')).join('');
+  modal('<section class="commentsSheet"><h2>Comments <small>'+comments.length+'</small></h2>'+
+    '<div class="commentList">'+(rows||'<p class="emptyView">No comments yet. Start the conversation.</p>')+'</div>'+
+    (reply?'<p class="replyTo">Replying to '+esc(reply.author)+' '+btn('Cancel','comments:'+reel.id,'subtle')+'</p>':'')+
+    '<form id="reelComment" data-reel="'+esc(reel.id)+'" data-reply="'+esc(replyId)+'" class="socialComposer"><input name="text" aria-label="Write a comment" placeholder="Write a comment…" maxlength="400" required><button class="primary">Post</button></form></section>');
+  if(reply)$('#reelComment input').focus();
+}
+function reelLink(reel){
+  const url=new URL(location.href);
+  url.hash='Clips/'+encodeURIComponent(reel.id);
+  return url.href;
+}
+function shareToX(reel){
+  if(!reel)return;
+  if(reel.owner==='me')return shareReel(reel);
+  const params=new URLSearchParams({text:reel.title,url:reelLink(reel)});
+  const href='https://x.com/intent/post?'+params;
+  modal('<h2>Share on X</h2><p>'+esc(reel.title)+'</p><a class="shareExternal" href="'+esc(href)+'" target="_blank" rel="noopener noreferrer">Open X composer ↗</a>');
+}
+function reportReel(reel){
+  if(!reel)return;
+  if(s.reports?.[reel.id])return toast('Report already saved on this device.');
+  modal('<h2>Report reel</h2><form id="reelReport" data-reel="'+esc(reel.id)+'"><label>Reason<select name="reason" required><option value="">Choose a reason</option><option>Spam</option><option>Harassment</option><option>Other</option></select></label><p class="muted">Demo reports are saved on this device.</p><button class="primary">Save report</button></form>');
+}
+function inbox(id){
+  const contacts=s.channels.filter(c=>c.id!=='me'),person=contacts.find(c=>c.id===id);
+  const messages=contact=>s.messages?.[contact.id]||[];
+  const people=contacts.slice().sort((a,b)=>(messages(b).at(-1)?.time||0)-(messages(a).at(-1)?.time||0));
+  const avatar=c=>'<span class="socialAvatar">'+esc(c.name[0])+'</span>';
+  if(!person)return '<section class="inboxPage"><h1>Inbox</h1><p class="muted">Demo chats · saved on this device</p><div class="inboxPeople">'+people.map(c=>
+    link(avatar(c)+'<span><strong>'+esc(c.name)+'</strong><small>'+esc(messages(c).at(-1)?.text||'Start a conversation')+'</small></span>','Inbox/'+c.id,'inboxPerson')
+  ).join('')+'</div></section>';
+  return '<section class="inboxPage"><div class="inboxTop">'+link('‹ Inbox','Inbox','subtle')+avatar(person)+'<h1>'+esc(person.name)+'</h1></div><p class="muted">Demo chat · saved on this device</p>'+
+    '<div class="inboxThread" aria-live="polite">'+(messages(person).length?messages(person).map(msg=>'<p class="chatBubble">'+esc(msg.text)+'</p>').join(''):'<p class="emptyView">Start a demo chat with '+esc(person.name)+'.</p>')+'</div>'+
+    '<form id="inboxMessage" class="socialComposer" data-person="'+esc(person.id)+'"><input name="text" aria-label="Message" placeholder="Write a message…" maxlength="500" required><button class="primary">Send</button></form></section>';
+}
+function submitSocial(form,data){
+  const text=String(data.get('text')||'').trim();
+  if(form.id==='reelComment'){
+    const reel=clip(form.dataset.reel);
+    if(!reel||!text)return;
+    const comments=(s.comments??={})[reel.id]??=[];
+    comments.push({id:crypto.randomUUID(),author:self()?.name||'You',text,reply:comments.some(row=>row.id===form.dataset.reply&&!row.reply)?form.dataset.reply:''});
+    save();showComments(reel);
+    const counter=$('.reel[data-id="'+CSS.escape(reel.id)+'"] [data-act^="comments:"] small');
+    if(counter)counter.textContent=fmt(comments.length);
+  }else if(form.id==='reelReport'){
+    const reel=clip(form.dataset.reel),reason=data.get('reason');
+    if(!reel||!['Spam','Harassment','Other'].includes(reason))return;
+    (s.reports??={})[reel.id]??=reason;
+    save();$('dialog').close();toast('Report saved on this device.');
+  }else if(form.id==='inboxMessage'){
+    const person=chan(form.dataset.person);
+    if(!person||person.id==='me'||!text)return;
+    ((s.messages??={})[person.id]??=[]).push({text,time:Date.now()});
+    save();render();$('#inboxMessage input').focus();
+    $('.inboxThread').scrollTop=$('.inboxThread').scrollHeight;
+  }
+}
 function reelActions(c,ch){
-  function control(label,symbol,act,style='',pressed=null){
+  function control(label,icon,act,{pressed=null,count=null,showLabel=false}={}){
     const state=pressed===null?'':' aria-pressed="'+pressed+'"';
-    return '<button type="button" class="railAction '+style+'" data-act="'+esc(act)+'"'+state+'><span aria-hidden="true">'+symbol+'</span>'+label+'</button>';
+    return '<button type="button" class="railAction '+(showLabel?'reelTrade':'reelIconAction')+'" data-act="'+esc(act)+'" aria-label="'+label+'" title="'+label+'"'+state+'>'+
+      reelIcon(icon)+(showLabel?label:'')+(count===null?'':'<small>'+fmt(count)+'</small>')+'</button>';
   }
   const actions=[];
-  if(ch.coin){
-    actions.push(control('Trade','↔','reelTrade:'+c.id,'reelTrade'));
-  }
-  for(const [key,label,symbol] of [['likes','Like','♡'],['saves','Save','☆'],['reposts','Repost','↻']]){
-    actions.push(control(label,symbol,'toggle:'+key+':'+c.id,'',s[key].includes(c.id)));
-  }
-  actions.push(control('Share','↗','reelShare:'+c.id));
+  if(ch.coin)actions.push(control('Trade','trade','reelTrade:'+c.id,{showLabel:true}));
+  actions.push(control('Like','like','toggle:likes:'+c.id,{pressed:s.likes.includes(c.id)}));
+  actions.push(control('Comments','comments','comments:'+c.id,{count:reelComments(c.id).length}));
+  actions.push(control('Save','save','toggle:saves:'+c.id,{pressed:s.saves.includes(c.id)}));
+  actions.push(control('Repost','repost','toggle:reposts:'+c.id,{pressed:s.reposts.includes(c.id)}));
+  actions.push(control('Share','share','reelShare:'+c.id));
+  actions.push(control('Share on X','tweet','reelTweet:'+c.id));
+  actions.push(control('Report','report','reelReport:'+c.id));
   return '<div class="reelRail" role="group" aria-label="Reel actions">'+actions.join('')+'</div>';
 }
 function feed(id){
   const idx=Math.max(0,s.clips.findIndex(c=>c.id===id));
   const items=[...s.clips.slice(idx),...s.clips.slice(0,idx)];
   return '<div class="feed" aria-label="Reels">'+items.map(c=>{
-    const ch=chan(c.owner),seeded=c.owner===c.id;
+    const ch=chan(c.owner),seeded=Boolean(punchlines[Number(c.id)-1])&&c.owner===c.id;
     const media=c.owner==='me'?'src="'+(urls[c.id]||'')+'"':'poster="media/'+c.id+'.jpg" src="media/'+c.id+'.mp4"';
     const backdrop=seeded?' style="--reel-poster:url(media/'+c.id+'.jpg)"':'';
     const caption=seeded?'<div class="memeCaption"><strong>'+esc(c.title)+'</strong><strong>'+esc(punchlines[Number(c.id)-1])+'</strong></div>':'';
+    const hashtags=reelHashtags(c).map(tag=>btn(esc(tag),'hashtag:'+esc(tag),'reelHashtag')).join('');
     const coin=ch.coin?link('$'+esc(ch.coin),'Trading/'+ch.id,'coinPill'):'';
     return '<article class="reel" data-id="'+c.id+'"'+backdrop+'><video playsinline muted loop controls '+media+'></video>'+caption+
       '<button type="button" class="momentGesture" aria-label="Hold to create Moment Coin" title="Hold to create Moment Coin"></button>'+
-      '<div class="controls"><div class="byline">'+link(esc(ch.name),'Profile/'+ch.id)+coin+'</div><h3>'+esc(c.title)+'</h3></div>'+reelActions(c,ch)+'</article>';
+      '<div class="controls"><div class="byline">'+link(esc(ch.name),'Profile/'+ch.id)+coin+'</div><h3>'+esc(c.title)+'</h3>'+(hashtags?'<div class="reelHashtags">'+hashtags+'</div>':'')+'</div>'+reelActions(c,ch)+'</article>';
   }).join('')+'</div>';
 }
 function observe(){observer?.disconnect();const root=$('.feed');if(!root)return;observer=new IntersectionObserver(entries=>entries.forEach(e=>{let v=e.target.querySelector('video');if(e.isIntersecting){v.play().catch(()=>{});let c=clip(e.target.dataset.id);c.views.push([Date.now(),last(c.views)+1]);save();}else v.pause();}),{root,threshold:.65});root.querySelectorAll('article').forEach(el=>observer.observe(el));}
@@ -170,6 +284,7 @@ const dockItems=[
   ['Trading','Trade','M3 17l6-6 4 3 8-10 M15 4h6v6'],
   ['Search','Explore','M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0 M15 15l6 6'],
   ['Clips','Reels','M8 4l12 8-12 8z'],
+  ['Inbox','Inbox','M3 5h18v13H3z M3 6l9 7 9-7'],
   ['Profile','Profile','M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0 M4 21v-2a8 8 0 0 1 16 0v2']
 ];
 function loginScreen(){
@@ -189,7 +304,7 @@ function render(){
     const active=route===p && (route!=='Profile'||!id||id==='me');
     return '<a href="#'+route+'" class="dockItem '+(route==='Clips'?'center ':'')+(active?'active':'')+'" '+(active?'aria-current="page"':'')+'><span class="dockIcon"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="'+icon+'"/></svg></span>'+label+'</a>';
   }).join('');
-  $('main').innerHTML=({Login:loginScreen,Trending:trending,Search:search,Clips:feed,Trading:trade,Profile:profile})[p](id);observe();paintWallet();
+  $('main').innerHTML=({Login:loginScreen,Trending:trending,Search:search,Clips:feed,Trading:trade,Inbox:inbox,Profile:profile})[p](id);observe();paintWallet();
   if(p==='Login')window.pulseWallet.loginPage($('#walletLogin'),()=>go(id==='portfolio'?'Profile':id&&chan(id)?.coin?'Trading/'+id:'Clips'));
 }
 function modal(html){$('#form').innerHTML=html;if(!$('dialog').open)$('dialog').showModal();}
@@ -202,8 +317,7 @@ function openReelTrade(reel){
 }
 async function shareReel(reel){
   if(!reel)return;
-  const url=new URL(location.href);
-  url.hash='Clips/'+encodeURIComponent(reel.id);
+  const url=reelLink(reel);
   try{
     if(reel.owner==='me'){
       const source=urls[reel.id];
@@ -224,14 +338,14 @@ async function shareReel(reel){
       return;
     }
     if(navigator.share){
-      await navigator.share({title:reel.title,url:url.href});return;
+      await navigator.share({title:reel.title,url});return;
     }
   }catch(error){if(error.name==='AbortError')return;}
   if(reel.owner==='me')return toast('Unable to share this video.');
   try{
-    await navigator.clipboard.writeText(url.href);toast('Reel link copied');
+    await navigator.clipboard.writeText(url);toast('Reel link copied');
   }catch{
-    modal('<label>Share reel<input readonly value="'+esc(url.href)+'"></label>');
+    modal('<label>Share reel<input readonly value="'+esc(url)+'"></label>');
     $('#form input').select();
   }
 }
@@ -327,7 +441,17 @@ document.addEventListener('contextmenu',event=>{
 function toast(msg){$('#notice').textContent=msg;clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>$('#notice').textContent='',3400);}
 function channelForm(next){modal('<h2>Create channel</h2><form id="channel" data-next="'+next+'"><label>Channel name<input name="name" required maxlength="48"></label><button class="primary">Create channel</button></form>');}
 function create(){if(!self())return channelForm('create');modal('<h2>Create reel</h2><form id="upload"><label>Reel title<input name="title" required maxlength="90"></label><label>Video file<input type="file" name="video" required accept="video/*"></label><button class="primary">Publish reel</button></form>');}
-function action(str,el){let [k,v,id]=str.split(':');if(k==='reelShare')return shareReel(clip(v));if(k==='reelTrade')return openReelTrade(clip(v));if(k==='explore'){
+function action(str,el){let [k,v,id]=str.split(':');
+if(k==='hashtag'){query=v;exploreTab='reels';return go('Search');}
+if(k==='comments'||k==='reply')return showComments(clip(v),id);
+if(k==='commentLike'){
+  const comment=reelComments(v).find(item=>item.id===id);
+  if(!comment)return;
+  comment.liked=!comment.liked;save();el.setAttribute('aria-pressed',String(comment.liked));return;
+}
+if(k==='reelReport')return reportReel(clip(v));
+if(k==='reelTweet')return shareToX(clip(v));
+if(k==='reelShare')return shareReel(clip(v));if(k==='reelTrade')return openReelTrade(clip(v));if(k==='explore'){
   if(v==='leaderboard')return go('Search/Leaderboard');
   exploreTab=v;return go('Search');
 }if(k==='group'){marketGroup=v;return render();}
@@ -347,7 +471,7 @@ document.addEventListener('change',e=>{if(e.target.id==='token')go('Trading/'+e.
 document.addEventListener('input',e=>{if(e.target.id==='search'){query=e.target.value;$('#exploreResults').innerHTML=exploreResults();}});
 const dbReady=new Promise((resolve,reject)=>{let req=indexedDB.open('pulse-clips',1);req.onupgradeneeded=()=>req.result.createObjectStore('videos');req.onerror=()=>reject(req.error);req.onsuccess=()=>resolve(req.result);});
 async function hydrate(){let db=await dbReady;let req=db.transaction('videos').objectStore('videos').openCursor();req.onsuccess=()=>{let cur=req.result;if(cur){urls[cur.key]=URL.createObjectURL(cur.value);cur.continue();}else if(['Clips','Profile','Search'].includes(path()[0]))render();};}
-document.addEventListener('submit',async e=>{let f=e.target;if(!f.id)return;e.preventDefault();let d=new FormData(f);if(f.id==='channel'){let name=d.get('name').trim();if(!name)return toast('Enter a channel name.');if(!self())s.channels.push({id:'me',name,followers:[[Date.now(),0]],following:0});save();if(f.dataset.next==='create')return create();go('Profile');}
+document.addEventListener('submit',async e=>{let f=e.target;if(!f.id)return;e.preventDefault();let d=new FormData(f);if(['reelComment','reelReport','inboxMessage'].includes(f.id))return submitSocial(f,d);if(f.id==='channel'){let name=d.get('name').trim();if(!name)return toast('Enter a channel name.');if(!self())s.channels.push({id:'me',name,followers:[[Date.now(),0]],following:0});save();if(f.dataset.next==='create')return create();go('Profile');}
 if(f.id==='launch'){let c=self(),symbol=d.get('symbol').toUpperCase();if(c.coin||s.channels.some(x=>x.coin===symbol))return toast('This symbol is already taken.');Object.assign(c,{coin:symbol,supply:1000000,prices:[[Date.now(),1]]});toast('Coin symbol saved. Open the market to launch.');}
 if(f.id==='upload'){let file=d.get('video'),title=d.get('title').trim();if(!title||!file.type.startsWith('video/'))return toast('Enter a title and choose a video.');f.querySelector('button').disabled=true;try{let db=await dbReady,id=crypto.randomUUID();await new Promise((ok,no)=>{let tx=db.transaction('videos','readwrite');tx.objectStore('videos').put(file,id);tx.oncomplete=ok;tx.onabort=no;});urls[id]=URL.createObjectURL(file);s.clips.push({id,owner:'me',title,likes:0,views:[[Date.now(),0]]});tab=0;go('Profile');toast('Reel published.');}catch{f.querySelector('button').disabled=false;return toast('Unable to save this video. Try a smaller file.');}}
 save();$('dialog').close();render();});
