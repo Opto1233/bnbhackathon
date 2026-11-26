@@ -459,6 +459,7 @@ function ranks(){
         '<strong class="'+(profitability&&value!==0?(value>0?'positive':'rankLoss'):'')+'">'+score+'</strong>'+reelThumb(reel)+'</li>';
     }).join('')+'</ol>':'<p class="emptyView">No rankings for this period.</p>')+'</section>';
 }
+function followedProfiles(){return s.profileFollows?.[myId()]||[];}
 function profile(id=myId()){
   if(id==='me')id=myId();
   const channel=chan(id), mine=id===myId();
@@ -469,10 +470,18 @@ function profile(id=myId()){
   const likes=owned.reduce((total,reel)=>total+reelLikeCount(reel),0);
   const action=!channel?btn('Create channel','channel','primary'):channel.coin?link('Trade $'+esc(channel.coin),'Trading/'+channel.id,'primary'):mine?btn('Launch channel coin','launch','primary'):'';
   const avatar=id!==myId()&&owned.length&&!owned[0].shared?' style="'+image(owned[0])+'"':'';
-  const stats=[['Following',channel?.following||0],['Followers',last(channel?.followers||[])],['Likes',likes]];
+  const following=followedProfiles();
+  const isFollowing=following.includes(id);
+  const localFollowers=Object.values(s.profileFollows||{}).filter(ids=>ids.includes(id)).length;
+  const stats=[['Following',(channel?.following||0)+(mine?following.length:0)],
+    ['Followers',last(channel?.followers||[])+localFollowers],['Likes',likes]];
+  const social=mine?'':'<div class="profileSocialActions">'+
+    '<button type="button" class="profileFollow'+(isFollowing?'':' primary')+'" data-act="followProfile:'+esc(id)+
+    '" aria-label="Follow '+esc(name)+'" aria-pressed="'+isFollowing+'">'+(isFollowing?'Following':'Follow')+'</button>'+
+    link('Message','Inbox/'+id,'profileMessage')+'</div>';
   return '<section class="creatorProfile"><div class="creatorIntro"><div class="creatorDetails"><h1>'+esc(name)+'</h1>'+
     (handle?'<p>@'+esc(handle)+'</p>':'')+'<dl class="creatorStats">'+stats.map(([label,count])=>'<div><dt>'+label+'</dt><dd>'+fmt(count)+'</dd></div>').join('')+'</dl></div><div class="creatorAvatar" aria-hidden="true"'+avatar+'>'+(avatar?'':esc(name[0]))+'</div></div>'+
-    '<div class="creatorActions">'+action+(mine&&channel?btn('Create video','create',''):'')+'</div>'+
+    social+(action||mine&&channel?'<div class="creatorActions">'+action+(mine&&channel?btn('Create video','create',''):'')+'</div>':'')+
     (mine?'<section class="panel portfolio" id="holdings"></section>':'')+
     (mine?viewTabs('Profile videos',[[0,'Posts'],[1,'Reposts'],[2,'Liked'],[3,'Saved']],tab,'tab'):'<h2 class="profilePosts">Posts</h2>')+
     (items.length?'<div class="creatorGrid">'+items.slice().reverse().map(reel=>reelThumb(reel)).join('')+'</div>':'<p class="emptyView">No videos here yet.</p>')+'</section>';
@@ -916,6 +925,13 @@ function create(){if(!self())return channelForm('create');modal('<h2>Create vide
 function action(str,el){let [k,v,id]=str.split(':');
 if(shared && ['channel','create','launch'].includes(k) && !window.pulseWallet.signed()){
   toast('Sign in with your wallet to publish.');return go('Login/profile');
+}
+if(k==='followProfile'){
+  if(v===myId()||!chan(v))return;
+  const following=followedProfiles();
+  (s.profileFollows??={})[myId()]=following.includes(v)?following.filter(id=>id!==v):[...following,v];
+  save();render();$('.profileFollow')?.focus();
+  return;
 }
 if(k==='hashtag'){query=v;exploreTab='reels';return go('Search');}
 if(k==='comments'||k==='reply')return showComments(clip(v),id);
