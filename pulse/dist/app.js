@@ -162,14 +162,14 @@ function submitSocial(form,data){
     $('.inboxThread').scrollTop=$('.inboxThread').scrollHeight;
   }
 }
-function reelActions(c,ch){
+function reelActions(c){
   function control(label,icon,act,{pressed=null,count=null,showLabel=false}={}){
     const state=pressed===null?'':' aria-pressed="'+pressed+'"';
     return '<button type="button" class="railAction '+(showLabel?'reelTrade':'reelIconAction')+'" data-act="'+esc(act)+'" aria-label="'+label+'" title="'+label+'"'+state+'>'+
       reelIcon(icon)+(showLabel?label:'')+(count===null?'':'<small>'+fmt(count)+'</small>')+'</button>';
   }
   const actions=[];
-  if(ch.coin)actions.push(control('Trade','trade','reelTrade:'+c.id,{showLabel:true}));
+  actions.push(control('Trade','trade','reelTrade:'+c.id,{showLabel:true}));
   actions.push(control('Like','like','toggle:likes:'+c.id,{pressed:s.likes.includes(c.id)}));
   actions.push(control('Comments','comments','comments:'+c.id,{count:reelComments(c.id).length}));
   actions.push(control('Save','save','toggle:saves:'+c.id,{pressed:s.saves.includes(c.id)}));
@@ -190,7 +190,7 @@ function feed(id){
     const coin=ch.coin?link('$'+esc(ch.coin),'Trading/'+ch.id,'coinPill'):'';
     return '<article class="reel" data-id="'+c.id+'"'+backdrop+'><video playsinline muted loop controls '+media+'></video>'+caption+
       '<button type="button" class="momentGesture" aria-label="Hold to create Moment Coin" title="Hold to create Moment Coin"></button>'+
-      '<div class="controls"><div class="byline">'+link(esc(ch.name),'Profile/'+ch.id)+coin+'</div><h3>'+esc(c.title)+'</h3>'+(hashtags?'<div class="reelHashtags">'+hashtags+'</div>':'')+'</div>'+reelActions(c,ch)+'</article>';
+      '<div class="controls"><div class="byline">'+link(esc(ch.name),'Profile/'+ch.id)+coin+'</div><h3>'+esc(c.title)+'</h3>'+(hashtags?'<div class="reelHashtags">'+hashtags+'</div>':'')+'</div>'+reelActions(c)+'</article>';
   }).join('')+'</div>';
 }
 function observe(){observer?.disconnect();const root=$('.feed');if(!root)return;observer=new IntersectionObserver(entries=>entries.forEach(e=>{let v=e.target.querySelector('video');if(e.isIntersecting){v.play().catch(()=>{});let c=clip(e.target.dataset.id);c.views.push([Date.now(),last(c.views)+1]);save();}else v.pause();}),{root,threshold:.65});root.querySelectorAll('article').forEach(el=>observer.observe(el));}
@@ -301,9 +301,10 @@ function render(){
   if(p==='Login')window.pulseWallet.loginPage($('#walletLogin'),()=>go(id==='portfolio'?'Profile':id&&chan(id)?.coin?'Trading/'+id:'Clips'));
 }
 function modal(html){$('#form').innerHTML=html;if(!$('dialog').open)$('dialog').showModal();}
-function openReelTrade(reel){
-  const creator=chan(reel?.owner);
-  if(!creator?.coin)return;
+function openReelTrade(reel,source){
+  if(!reel)return;
+  const creator=chan(reel.owner);
+  if(!creator?.coin)return openMoment(reel,source);
   modal('<div class="reelTradeHeading"><small>CREATOR MARKET</small><strong>'+esc(creator.name)+'</strong></div>'+
     '<div id="reelTicket" class="chainPanel" data-owner="'+esc(creator.id)+'"></div>');
   paintWallet();
@@ -443,7 +444,7 @@ if(k==='commentLike'){
   comment.liked=!comment.liked;save();el.setAttribute('aria-pressed',String(comment.liked));return;
 }
 if(k==='reelReport')return reportReel(clip(v));
-if(k==='reelShare')return shareReel(clip(v));if(k==='reelTrade')return openReelTrade(clip(v));if(k==='explore'){
+if(k==='reelShare')return shareReel(clip(v));if(k==='reelTrade')return openReelTrade(clip(v),el.closest('.reel')?.querySelector('video'));if(k==='explore'){
   if(v==='leaderboard')return go('Search/Leaderboard');
   exploreTab=v;return go('Search');
 }if(k==='group'){marketGroup=v;return render();}
