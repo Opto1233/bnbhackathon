@@ -281,12 +281,102 @@ function feed(id){
     const caption=seeded?'<div class="memeCaption"><strong>'+esc(c.title)+'</strong><strong>'+esc(punchlines[Number(c.id)-1])+'</strong></div>':'';
     const hashtags=reelHashtags(c).map(tag=>btn(esc(tag),'hashtag:'+esc(tag),'reelHashtag')).join('');
     const coin=ch.coin?link('$'+esc(ch.coin),'Trading/'+ch.id,'coinPill'):'';
-    return '<article class="reel" data-id="'+c.id+'"'+backdrop+'><video playsinline muted loop controls '+media+'></video>'+caption+
+    return '<article class="reel" data-id="'+c.id+'"'+backdrop+'><video playsinline muted controls '+media+'></video>'+caption+
       '<button type="button" class="momentGesture" aria-label="Hold to create Moment Coin" title="Hold to create Moment Coin"></button>'+
       '<div class="controls"><div class="byline">'+link(esc(ch.name),'Profile/'+ch.id)+coin+momentBadge(c)+'</div><h3>'+esc(c.title)+'</h3>'+(demoReel(c.id)?'<span class="demoLabel">Demo activity</span>':'')+(hashtags?'<div class="reelHashtags">'+hashtags+'</div>':'')+'</div>'+reelActions(c)+'</article>';
   }).join('')+'</div>';
 }
-function observe(){observer?.disconnect();const root=$('.feed');if(!root)return;observer=new IntersectionObserver(entries=>entries.forEach(e=>{let v=e.target.querySelector('video');if(e.isIntersecting){v.play().catch(()=>{});let c=clip(e.target.dataset.id);c.views.push([Date.now(),last(c.views)+1]);save();}else v.pause();}),{root,threshold:.65});root.querySelectorAll('article').forEach(el=>observer.observe(el));}
+const reelVisibility=.65;
+let activeReelWatch, feedRoute;
+function applySharedViews(views,count){
+  if(count==null)return;
+  const total=Number(count);
+  if(Number.isSafeInteger(total)&&total>last(views))views.push([Date.now(),total]);
+}
+function recordReelView(reel){
+  if(!reel||reel.owner===myId())return;
+  if(reel.shared){
+    shared.recordView(reel.id,crypto.randomUUID()).then(count=>{
+      const current=clip(reel.id);
+      if(current)applySharedViews(current.views,count);
+    }).catch(error=>console.warn('Shared view could not be recorded:',error.message));
+    return;
+  }
+  reel.views.push([Date.now(),last(reel.views)+1]);
+  save();
+}
+function observe(previous){
+  observer?.disconnect();
+  activeReelWatch=null;
+  const root=$('.feed');
+  if(!root)return;
+  const watches=new Map();
+  for(const article of root.querySelectorAll('.reel')){
+    const video=article.querySelector('video'), id=article.dataset.id;
+    const restored=previous?.id===id?previous:null;
+    const watch={id,video,visible:false,counted:restored?.counted||false,position:0};
+    watches.set(article,watch);
+    if(restored){
+      root.scrollTop=article.offsetTop-root.firstElementChild.offsetTop;
+      if(restored.position>0)video.addEventListener('loadedmetadata',()=>{
+        if(restored.position<video.duration)video.currentTime=restored.position;
+      },{once:true});
+    }
+    function countPlayback(){
+      if(!video.isConnected||!watch.visible||document.hidden||video.paused||watch.counted)return;
+      watch.counted=true;
+      recordReelView(clip(id));
+    }
+    watch.play=()=>video.play().then(countPlayback).catch(()=>{});
+    video.addEventListener('playing',countPlayback);
+    video.addEventListener('timeupdate',()=>{
+      if(video.seeking)return;
+      watch.position=video.currentTime;
+      if(watch.restarted&&watch.position>0){watch.restarted=false;countPlayback();}
+    });
+    video.addEventListener('seeking',()=>{
+      if(watch.visible&&watch.counted&&watch.position>.05&&video.currentTime<=.01){
+        watch.counted=false;
+        watch.restarted=true;
+      }
+    });
+    video.addEventListener('ended',()=>{
+      watch.counted=false;
+      watch.position=0;
+      if(watch.visible&&!document.hidden)watch.play();
+    });
+  }
+  observer=new IntersectionObserver(entries=>{
+    if(!root.isConnected)return;
+    for(const entry of entries){
+      const watch=watches.get(entry.target);
+      const visible=entry.intersectionRatio>=reelVisibility;
+      if(watch.visible===visible)continue;
+      watch.visible=visible;
+      if(visible){
+        activeReelWatch=watch;
+        watch.resumeOnShow=document.hidden;
+        if(!document.hidden)watch.play();
+      }else{
+        if(activeReelWatch===watch)activeReelWatch=null;
+        watch.video.pause();
+        watch.counted=false;
+      }
+    }
+  },{root,threshold:reelVisibility});
+  for(const article of watches.keys())observer.observe(article);
+}
+document.addEventListener('visibilitychange',()=>{
+  const watch=activeReelWatch;
+  if(!watch)return;
+  if(document.hidden){
+    watch.resumeOnShow=!watch.video.paused;
+    watch.video.pause();
+  }else if(watch.resumeOnShow&&!$('dialog').open){
+    watch.resumeOnShow=false;
+    watch.play();
+  }
+});
 let marketGroup='creators';
 const marketDemoUsdRate=600;
 const marketUsdFormatter=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:6});
@@ -511,7 +601,10 @@ function render(){
     const symbol=route==='Trading'?tradeSymbol:'<svg aria-hidden="true" viewBox="0 0 24 24"><path d="'+icon+'"/></svg>';
     return '<a href="#'+route+'" class="dockItem '+(route==='Clips'?'center ':'')+(active?'active':'')+'" '+(active?'aria-current="page"':'')+'><span class="dockIcon">'+symbol+'</span>'+label+'</a>';
   }).join('');
-  $('main').innerHTML=({Login:loginScreen,Trending:trending,Search:search,Clips:feed,Trading:trade,Inbox:inbox,Profile:profile})[p](id);observe();paintWallet();paintMarketRows();
+  const previous=p==='Clips'&&feedRoute===location.hash?activeReelWatch:null;
+  activeReelWatch?.video.pause();
+  feedRoute=p==='Clips'?location.hash:null;
+  $('main').innerHTML=({Login:loginScreen,Trending:trending,Search:search,Clips:feed,Trading:trade,Inbox:inbox,Profile:profile})[p](id);observe(previous);paintWallet();paintMarketRows();
   if(p==='Login')window.pulseWallet.loginPage($('#walletLogin'),()=>go(['portfolio','profile'].includes(id)?'Profile':id&&chan(id)?.coin?'Trading/'+id:'Clips'));
 }
 function modal(html){$('#form').innerHTML=html;if(!$('dialog').open)$('dialog').showModal();}
@@ -997,10 +1090,11 @@ async function refreshShared() {
   s.channels = [...s.channels.filter(c=>!c.shared), ...creators.map(c=>({
     id:c.id, name:c.name, coin:c.ticker, walletId:c.wallet, shared:true, followers:[], following:0
   }))];
-  s.clips = [...videos.map(v=>({
-    id:v.id, owner:v.creator_id, title:v.title, shared:true, media:shared.media(v),
-    likes:0, views:known.get(v.id)?.views || [[Date.parse(v.created_at),0]]
-  })), ...s.clips.filter(c=>!c.shared)];
+  s.clips = [...videos.map(v=>{
+    const views=known.get(v.id)?.views||[[Date.now(),0]];
+    applySharedViews(views,v.view_count);
+    return {id:v.id, owner:v.creator_id, title:v.title, shared:true, media:shared.media(v), likes:0, views};
+  }), ...s.clips.filter(c=>!c.shared)];
   render();
 }
 

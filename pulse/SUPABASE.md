@@ -39,6 +39,10 @@ npm run build
 python3 -m http.server 8000 --directory dist
 ```
 
+## Shared video views
+
+Apply [the video views migration](supabase/migrations/202611260003_video_views.sql) after the base schema and wallet fix. It stores shared totals, deduplicates playback events and excludes views by the signed-in video owner. Guest playback is anonymous.
+
 ## Share the repository and deploy
 
 Commit source files, the SQL migration, and the empty `.env.example`. Use an optional `.env.local` to override the team defaults. Git ignores both that file and the generated `dist/pulse-config.js`. To check locally, run:

@@ -42,6 +42,11 @@ export const shared = client && {
     const creators = await rows('pulse_creators');
     return { creators, videos: videos.sort((a,b) => b.created_at.localeCompare(a.created_at)) };
   },
+  async recordView(videoId, playbackId) {
+    const { data, error } = await client.rpc('pulse_record_video_view', { target_video: videoId, playback: playbackId });
+    if (error) throw error;
+    return data;
+  },
   media(row) {
     return client.storage.from('pulse-videos').getPublicUrl(row.creator_id + '/' + row.id).data.publicUrl;
   },
