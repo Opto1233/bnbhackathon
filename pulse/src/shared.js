@@ -47,6 +47,21 @@ export const shared = client && {
     if (error) throw error;
     return data;
   },
+  avatar(row) {
+    if (!row.avatar_updated_at) return '';
+    const { data } = client.storage.from('pulse-avatars').getPublicUrl(row.id + '/avatar.jpg');
+    return data.publicUrl + '?v=' + encodeURIComponent(row.avatar_updated_at);
+  },
+  async setAvatar(file) {
+    const owner = userId;
+    if (!owner) throw Error('Sign in to change your profile photo.');
+    const { error } = await client.storage.from('pulse-avatars').upload(owner + '/avatar.jpg', file, {
+      contentType: 'image/jpeg', upsert: true, cacheControl: '0'
+    });
+    if (error) throw error;
+    if (owner !== userId) throw Error('Wallet changed. Sign in again.');
+    await rpc('pulse_set_profile_photo');
+  },
   media(row) {
     return client.storage.from('pulse-videos').getPublicUrl(row.creator_id + '/' + row.id).data.publicUrl;
   },

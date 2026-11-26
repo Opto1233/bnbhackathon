@@ -62,14 +62,13 @@ function reelThumb(reel, className=''){
     ? '<video src="'+esc(reel.media || urls[reel.id])+'" muted playsinline preload="metadata" aria-hidden="true"></video>' : '';
   return '<button type="button" class="reelThumb '+className+'" data-go="Clips/'+esc(reel.id)+'" aria-label="Play '+esc(reel.title)+'" style="'+image(reel)+'">'+preview+'<span>▷ '+fmt(last(reel.views))+'</span></button>';
 }
+function profileAvatar(channel,className){
+  const image=channel?.avatar?'<img class="profileAvatarImage" src="'+esc(channel.avatar)+'" alt="">':'';
+  return '<span class="'+className+'" aria-hidden="true">'+esc(channel?.name[0]?.toUpperCase()||'')+image+'</span>';
+}
 function exploreProfileLink(channel,title,subtitle,route){
-  const reel=s.clips.find(clip=>clip.owner===channel.id);
-  const video=reel?.media||(reel&&urls[reel.id]);
-  const poster=reel?image(reel):'';
-  const avatar='<span class="exploreAvatar" aria-hidden="true"'+(poster?' style="'+poster+'"':'')+'>'+
-    (poster?'':esc(channel.name[0]?.toUpperCase()||''))+
-    (video?'<video muted playsinline preload="metadata" src="'+esc(video.split('#')[0]+'#t=0.1')+'"></video>':'')+'</span>';
-  return '<div class="exploreRow">'+link(avatar+'<span class="exploreProfileName"><strong>'+esc(title)+'</strong>'+
+  return '<div class="exploreRow">'+link(profileAvatar(channel,'exploreAvatar')+
+    '<span class="exploreProfileName"><strong>'+esc(title)+'</strong>'+
     (subtitle?'<small>'+esc(subtitle)+'</small>':'')+'</span>',route,'exploreTitle exploreProfileLink')+'</div>';
 }
 let exploreTab='all';
@@ -569,7 +568,6 @@ function profile(id=myId()){
   const name=channel?.name||'My profile', handle=channel?.name.toLowerCase().replaceAll(/[^\p{L}\p{N}]+/gu,'_').replace(/^_|_$/g,'');
   const likes=owned.reduce((total,reel)=>total+reelLikeCount(reel),0);
   const action=!channel?btn('Create channel','channel','primary'):channel.coin?link('Trade $'+esc(channel.coin),'Trading/'+channel.id,'primary'):mine?btn('Launch channel coin','launch','primary'):'';
-  const avatar=id!==myId()&&owned.length&&!owned[0].shared?' style="'+image(owned[0])+'"':'';
   const following=followedProfiles();
   const isFollowing=following.includes(id);
   const localFollowers=Object.values(s.profileFollows||{}).filter(ids=>ids.includes(id)).length;
@@ -580,8 +578,8 @@ function profile(id=myId()){
     '" aria-label="Follow '+esc(name)+'" aria-pressed="'+isFollowing+'">'+(isFollowing?'Following':'Follow')+'</button>'+
     link('Message','Inbox/'+id,'profileMessage')+'</div>';
   return '<section class="creatorProfile"><div class="creatorIntro"><div class="creatorDetails"><h1>'+esc(name)+'</h1>'+
-    (handle?'<p>@'+esc(handle)+'</p>':'')+'<dl class="creatorStats">'+stats.map(([label,count])=>'<div><dt>'+label+'</dt><dd>'+fmt(count)+'</dd></div>').join('')+'</dl></div><div class="creatorAvatar" aria-hidden="true"'+avatar+'>'+(avatar?'':esc(name[0]))+'</div></div>'+
-    social+(action||mine&&channel?'<div class="creatorActions">'+action+(mine&&channel?btn('Create video','create',''):'')+'</div>':'')+
+    (handle?'<p>@'+esc(handle)+'</p>':'')+'<dl class="creatorStats">'+stats.map(([label,count])=>'<div><dt>'+label+'</dt><dd>'+fmt(count)+'</dd></div>').join('')+'</dl></div>'+profileAvatar(channel||{name},'creatorAvatar')+'</div>'+
+    social+(action||mine&&channel?'<div class="creatorActions">'+action+(mine&&channel?btn('Create video','create','')+btn('Edit profile photo','editPhoto',''):'')+'</div>':'')+
     (mine?'<section class="panel portfolio" id="holdings"></section>':'')+
     (mine?viewTabs('Profile videos',[[0,'Posts'],[1,'Reposts'],[2,'Liked'],[3,'Saved']],tab,'tab'):'<h2 class="profilePosts">Posts</h2>')+
     (items.length?'<div class="creatorGrid">'+items.slice().reverse().map(reel=>reelThumb(reel)).join('')+'</div>':'<p class="emptyView">No videos here yet.</p>')+'</section>';
@@ -1029,6 +1027,12 @@ function action(str,el){let [k,v,id]=str.split(':');
 if(shared && ['channel','create','launch'].includes(k) && !window.pulseWallet.signed()){
   toast('Sign in with your wallet to publish.');return go('Login/profile');
 }
+if(k==='editPhoto'){
+  if(!self())return;
+  return modal('<h2>Edit profile photo</h2><form id="profilePhoto">'+
+    '<label>Choose a photo<input type="file" name="photo" accept="image/jpeg,image/png,image/webp" required></label>'+
+    '<button class="primary">Save photo</button></form>');
+}
 if(k==='followProfile'){
   if(v===myId()||!chan(v))return;
   const following=followedProfiles();
@@ -1087,8 +1091,8 @@ document.addEventListener('click',e=>{
     return;
   }
   let el=e.target.closest('[data-go],[data-act]');if(!el)return;if(el.dataset.go)go(el.dataset.go);else action(el.dataset.act,el);});
-document.addEventListener('loadeddata',event=>{
-  if(event.target.matches('.exploreAvatar video'))event.target.classList.add('frameReady');
+document.addEventListener('load',event=>{
+  if(event.target instanceof HTMLImageElement&&event.target.matches('.profileAvatarImage'))event.target.classList.add('avatarReady');
 },true);
 document.addEventListener('change',e=>{if(e.target.id==='token')go('Trading/'+e.target.value);});
 document.addEventListener('input',e=>{if(e.target.id==='search'){query=e.target.value;$('#exploreResults').innerHTML=exploreResults();}});
@@ -1101,7 +1105,7 @@ async function refreshShared() {
   if(request !== sharedRead)return;
   const known = new Map(s.clips.filter(c=>c.shared).map(c=>[c.id,c]));
   s.channels = [...s.channels.filter(c=>!c.shared), ...creators.map(c=>({
-    id:c.id, name:c.name, coin:c.ticker, walletId:c.wallet, shared:true, followers:[], following:0
+    id:c.id, name:c.name, coin:c.ticker, walletId:c.wallet, shared:true, avatar:shared.avatar(c), followers:[], following:0
   }))];
   s.clips = [...videos.map(v=>{
     const views=known.get(v.id)?.views||[[Date.now(),0]];
@@ -1109,6 +1113,49 @@ async function refreshShared() {
     return {id:v.id, owner:v.creator_id, title:v.title, shared:true, media:shared.media(v), likes:0, views};
   }), ...s.clips.filter(c=>!c.shared)];
   render();
+}
+
+async function prepareProfilePhoto(file){
+  if(!file||!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10*1024*1024)
+    throw Error('Choose a JPG, PNG, or WebP photo up to 10 MB.');
+  const url=URL.createObjectURL(file);
+  try{
+    const photo=new Image();
+    photo.src=url;
+    await photo.decode();
+    const side=Math.min(photo.naturalWidth,photo.naturalHeight);
+    const canvas=document.createElement('canvas');
+    canvas.width=canvas.height=256;
+    const context=canvas.getContext('2d');
+    context.fillStyle='#2a3022';
+    context.fillRect(0,0,256,256);
+    context.drawImage(photo,(photo.naturalWidth-side)/2,(photo.naturalHeight-side)/2,side,side,0,0,256,256);
+    return canvas;
+  }catch{throw Error('This photo could not be opened. Choose another image.');}
+  finally{URL.revokeObjectURL(url);}
+}
+async function saveProfilePhoto(form){
+  const channel=self(), button=form.querySelector('button');
+  if(!channel||button.disabled)return;
+  if(shared&&!window.pulseWallet.signed()){go('Login/profile');$('dialog').close();return;}
+  button.disabled=true;
+  try{
+    const canvas=await prepareProfilePhoto(form.elements.photo.files[0]);
+    if(shared){
+      const photo=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.88));
+      if(!photo)throw Error('This photo could not be saved.');
+      if(self()?.id!==channel.id)throw Error('Wallet changed. Sign in again.');
+      await shared.setAvatar(photo);
+      await refreshShared();
+    }else{
+      channel.avatar=canvas.toDataURL('image/jpeg',.88);
+      save();
+      render();
+    }
+    if(form.isConnected)$('dialog').close();
+    toast('Profile photo updated.');
+  }catch(error){toast(error.message||'Could not save your photo. Please retry.');}
+  finally{button.disabled=false;}
 }
 
 async function submitShared(form, data) {
@@ -1140,7 +1187,7 @@ async function submitShared(form, data) {
   }finally{button.disabled=false;}
 }
 
-document.addEventListener('submit',async e=>{let f=e.target;if(!f.id)return;e.preventDefault();let d=new FormData(f);if(shared && ['channel','launch','upload'].includes(f.id))return submitShared(f,d);if(['reelComment','reelReport','inboxMessage'].includes(f.id))return submitSocial(f,d);if(f.id==='channel'){let name=d.get('name').trim();if(!name)return toast('Enter a channel name.');if(!self())s.channels.push({id:'me',name,followers:[[Date.now(),0]],following:0});save();if(f.dataset.next==='create')return create();go('Profile');}
+document.addEventListener('submit',async e=>{let f=e.target;if(!f.id)return;e.preventDefault();let d=new FormData(f);if(f.id==='profilePhoto')return saveProfilePhoto(f);if(shared && ['channel','launch','upload'].includes(f.id))return submitShared(f,d);if(['reelComment','reelReport','inboxMessage'].includes(f.id))return submitSocial(f,d);if(f.id==='channel'){let name=d.get('name').trim();if(!name)return toast('Enter a channel name.');if(!self())s.channels.push({id:'me',name,followers:[[Date.now(),0]],following:0});save();if(f.dataset.next==='create')return create();go('Profile');}
 if(f.id==='launch'){let c=self(),symbol=d.get('symbol').toUpperCase();if(c.coin||s.channels.some(x=>x.coin===symbol))return toast('This symbol is already taken.');Object.assign(c,{coin:symbol,supply:1000000,prices:[[Date.now(),1]]});toast('Coin symbol saved. Open the market to launch.');}
 if(f.id==='upload'){let file=d.get('video'),title=d.get('title').trim();if(!title||!file.type.startsWith('video/'))return toast('Enter a title and choose a video.');f.querySelector('button').disabled=true;try{let db=await dbReady,id=crypto.randomUUID();await new Promise((ok,no)=>{let tx=db.transaction('videos','readwrite');tx.objectStore('videos').put(file,id);tx.oncomplete=ok;tx.onabort=no;});urls[id]=URL.createObjectURL(file);s.clips.push({id,owner:'me',title,likes:0,views:[[Date.now(),0]]});tab=0;go('Profile');toast('Video published.');}catch{f.querySelector('button').disabled=false;return toast('Unable to save this video. Try a smaller file.');}}
 save();$('dialog').close();render();});

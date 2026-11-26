@@ -43,6 +43,10 @@ python3 -m http.server 8000 --directory dist
 
 Apply [the video views migration](supabase/migrations/202611260003_video_views.sql) after the base schema and wallet fix. It stores shared totals, deduplicates playback events and excludes views by the signed-in video owner. Guest playback is anonymous.
 
+## Profile photos
+
+Apply [the profile photos migration](supabase/migrations/202611260004_profile_photos.sql). Signed-in creators can change their photo from their Profile. The photo is public and appears on the profile and in Explore.
+
 ## Share the repository and deploy
 
 Commit source files, the SQL migration, and the empty `.env.example`. Use an optional `.env.local` to override the team defaults. Git ignores both that file and the generated `dist/pulse-config.js`. To check locally, run:
