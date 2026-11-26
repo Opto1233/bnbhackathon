@@ -47,3 +47,17 @@ npm run test:journey
 ```
 
 The trade test runs desktop and mobile journeys, checks the two purchase responses and verifies the buyer’s item after reload. Set ROFUN_VIDEO to an output directory to record the desktop rehearsal. The API tests exercise fee allocation, authorization, review delay, duplicate confirmations and room isolation. Production build output includes client assets and the worker in dist/.
+
+## Run a BNB Smart Chain Testnet trade
+
+Open **Start demo → Open BSC Testnet market** from Discover. This market deploys a sample Vault Relic NFT (ERC-721) and an independent test RELIC token (ERC-20). The vault game and its preview portfolio use the local demo ledger.
+
+1. In a wallet-enabled browser, switch to **BNB Smart Chain Testnet (97)**. Fund separate seller and buyer accounts with test BNB for gas. Use a third address for the RoFun treasury.
+2. With the seller account selected, enter the treasury address and deploy. Approve Vault Relic #1 and list it for 1 RELIC. Send the market share link to the buyer.
+3. With the buyer account selected, load the shared market, claim 2 test RELIC, approve exactly 1 RELIC and buy. The contract escrows the NFT during listing and settles the purchase atomically.
+4. Open the confirmed transaction in BscScan. The settlement event shows the buyer, seller and four amounts. The transaction also records the ERC-721 transfer, ERC-20 proceeds and treasury transfer, and the burn. Gas is paid separately in tBNB.
+
+Use `npm run test:chain` to verify the same contract on local Anvil, including a two-buyer race, a cancelled quote, owner and balance changes, treasury and total-supply reduction. The application uses public BSC Testnet through the selected browser wallet. The repository contains the testnet contracts and reproducible compiler setup.
+
+- [Official BSC Testnet wallet settings](https://docs.bnbchain.org/bnb-smart-chain/developers/wallet-configuration/)
+- [Official guide to obtaining test BNB](https://docs.bnbchain.org/bnb-smart-chain/developers/faucet/)

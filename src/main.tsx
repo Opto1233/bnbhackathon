@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState} from 'react'
+import {lazy,Suspense,useEffect,useRef,useState} from 'react'
 import {createRoot} from 'react-dom/client'
 import {Activity,Bell,Bookmark,ChartNoAxesCombined,ChevronDown,Compass,FlaskConical,Gamepad2,Menu,Megaphone,Plus,Rocket,Search,ShieldCheck,Sparkles,UserRound,Wallet,X,Zap} from 'lucide-react'
 import {Catalog,type OpenGame} from './components/catalog'
@@ -16,13 +16,14 @@ import {initial,num} from './lib/data'
 import {refreshActivity} from './lib/sessions'
 import type {State} from './lib/model'
 import './style.css'
+const TestnetMarket=lazy(()=>import('./components/testnet-market'))
 const explorer=[['Discover',Compass],['Trending',Zap],['New Games',Sparkles],['Pre-Migration',Activity],['Migrated',ShieldCheck],['Watchlist',Bookmark],['Portfolio',Wallet],['Social',Megaphone]] as const
 const dev=[['Developer Hub',ChartNoAxesCombined],['Launch Game',Plus],['Platform Revenue',Wallet]] as const
 function load():State{
  try{return restore(localStorage.getItem(storageKey))}catch{return initial()}
 }
 function route(){
- const [page='Discover',id='',tab='Overview']=location.hash.slice(1).split('/').map(value=>{try{return decodeURIComponent(value)}catch{return value}})
+ const [page='Discover',id='',tab='Overview']=location.hash.slice(1).split('?')[0].split('/').map(value=>{try{return decodeURIComponent(value)}catch{return value}})
  return {page:page==='Callouts'?'Social':page==='World Chat'?'Discover':page||'Discover',id,tab}
 }
 function App(){
@@ -78,7 +79,7 @@ function App(){
  <main className="content">
  {storageWarning&&<p className="warning">Browser storage is unavailable. This session’s changes are held in memory.</p>}
  <Guide state={state} update={update} go={go} page={page} id={id} tab={tab}/>
- {page==='game'?(g?<Details key={g.id+location.hash.split('/')[3]} g={g} state={state} tab={tab} setTab={t=>go('game',g.id,t)} back={()=>navigate('Discover')} update={update} toggle={()=>toggle(g.id)} notify={notify}/>:<div className="panel"><h1>Game unavailable</h1><Button onClick={()=>navigate('Discover')}>Discover games</Button></div>):page==='Social'?<Community key={id} state={state} listing={id}/>:page==='Trade Demo'?<TradeDemo/>:page==='Portfolio'?<Portfolio key={id+tab} focusRole={id} focusItem={tab} state={state}/>:page==='Platform Revenue'?<Revenue state={state}/>:page==='Demo'?<Demo startGuide={()=>{update(s=>({...s,guide:0}));navigate('Discover')}} state={state} update={update} open={open} notify={notify}/>:page==='Developer Hub'?<Developer state={state} update={update} launch={()=>navigate('Launch Game')}/>:page==='Launch Game'?<Launch state={state} update={update} open={open}/>:<Catalog state={state} page={page} query={query} genre={genre} setGenre={setGenre} open={open} toggle={toggle} navigate={navigate}/>}
+ {page==='game'?(g?<Details key={g.id+location.hash.split('/')[3]} g={g} state={state} tab={tab} setTab={t=>go('game',g.id,t)} back={()=>navigate('Discover')} update={update} toggle={()=>toggle(g.id)} notify={notify}/>:<div className="panel"><h1>Game unavailable</h1><Button onClick={()=>navigate('Discover')}>Discover games</Button></div>):page==='Social'?<Community key={id} state={state} listing={id}/>:page==='Testnet Market'?<Suspense fallback={<p>Loading testnet market…</p>}><TestnetMarket/></Suspense>:page==='Trade Demo'?<TradeDemo/>:page==='Portfolio'?<Portfolio key={id+tab} focusRole={id} focusItem={tab} state={state}/>:page==='Platform Revenue'?<Revenue state={state}/>:page==='Demo'?<Demo startGuide={()=>{update(s=>({...s,guide:0}));navigate('Discover')}} state={state} update={update} open={open} notify={notify}/>:page==='Developer Hub'?<Developer state={state} update={update} launch={()=>navigate('Launch Game')}/>:page==='Launch Game'?<Launch state={state} update={update} open={open}/>:<Catalog state={state} page={page} query={query} genre={genre} setGenre={setGenre} open={open} toggle={toggle} navigate={navigate}/>}
  <footer><span>RoFun · Play First. Graduate Later.</span><span>Local Arena gameplay · Simulated platform statistics and funds.</span></footer>
  </main></div>{toast&&<div className="toast" role="status"><Rocket size={17}/>{toast}</div>}</div>
 }

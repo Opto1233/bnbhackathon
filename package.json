@@ -10,9 +10,14 @@
     "test:domain": "node tests/domain.mjs",
     "db:generate": "drizzle-kit generate",
     "test:market": "node tests/relic.mjs",
-    "test:trade": "node tests/stage-browser.mjs"
+    "test:trade": "node tests/stage-browser.mjs",
+    "build:contracts": "node scripts/build-contract.mjs",
+    "predev": "npm run build:contracts",
+    "prebuild": "npm run build:contracts",
+    "test:chain": "npm run build:contracts && node --experimental-strip-types tests/chain.mjs"
   },
   "dependencies": {
+    "@openzeppelin/contracts": "5.3.0",
     "@radix-ui/react-slot": "^1.2.3",
     "@tailwindcss/vite": "^4",
     "class-variance-authority": "^0.7.1",
@@ -22,14 +27,17 @@
     "react-dom": "^19",
     "recharts": "^2.15.4",
     "tailwind-merge": "^3",
-    "tailwindcss": "^4"
+    "tailwindcss": "^4",
+    "viem": "^2.58.6"
   },
   "devDependencies": {
+    "@foundry-rs/anvil": "1.7.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "drizzle-kit": "^0.31.11",
     "drizzle-orm": "^0.45.4",
     "playwright": "^1.62.1",
+    "solc": "^0.8.39",
     "typescript": "^5.8",
     "vite": "^6"
   }

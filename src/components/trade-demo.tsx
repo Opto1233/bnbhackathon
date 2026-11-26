@@ -45,7 +45,7 @@ export function TradeDemo(){
   if(results.every(result=>result.status==='rejected'))throw new Error('Neither purchase settled. Review the current requests and balances.')
  }
  const status=['Recover or select a relic','Request trade','Seller approval','Buyer confirmation','Settled']
- return <div className="trade-stage"><div className="heading"><div><h1>Relic Vale trade demo</h1><p>Private rehearsal · three virtual wallets · settlement in RELIC</p></div><Button disabled={busy} onClick={()=>confirmReset(true)}>Restart demo</Button></div>
+ return <div className="trade-stage"><div className="heading"><div><h1>Relic Vale trade demo</h1><p>Private rehearsal · three virtual wallets · settlement in RELIC</p></div><div className="hero-actions"><Button onClick={()=>location.hash="Testnet%20Market"}>Open BSC Testnet market</Button><Button disabled={busy} onClick={()=>confirmReset(true)}>Restart demo</Button></div></div>
  {reset&&<div className="warning">Reset this rehearsal’s relics, offers and wallets?<Button disabled={busy} onClick={()=>perform(async()=>{await call('Seller',{action:'reset'});confirmReset(false)})}>Reset rehearsal</Button><Button onClick={()=>confirmReset(false)}>Keep playing</Button></div>}
  <ol className="stage-steps">{status.map((label,i)=><li key={label} aria-current={step===i?'step':undefined}>{i<step?<Check size={14}/>:i+1} {label}</li>)}</ol>
  {error&&<div role="alert" className="warning">{error}<Button onClick={()=>perform(async()=>{})}>Refresh</Button></div>}
