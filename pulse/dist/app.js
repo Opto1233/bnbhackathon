@@ -4,6 +4,7 @@ const epoch=Date.now(), names=['Tokyo Afterhours','Ocean Motion','Stereo Club','
 function hist(total,i){return [35,30,7,1,.7,.4,.15,0].map((d,j)=>[epoch-day*d,Math.round(total*[.02,.08,.22,.42,.48,.56,.86,1][j])]);}
 function seed(){let channels=names.map((name,i)=>({id:String(i+1),name,coin:tags[i],prices:hist([4.8,3.2,2.1,1.6][i]*100,i).map(([t,v])=>[t,v/100]),supply:1000000,followers:hist(38000/(i+1),i),following:16+i}));return {channels,clips:titles.map((title,i)=>({id:String(i+1),owner:String(i+1),title,views:hist([248600,142800,86400,47200][i],i),likes:4200-i*800})),cash:10000,hold:{},closed:channels.map((c,i)=>({owner:c.id,t:epoch-day*.4,pnl:1200-i*310})),likes:[],saves:[],reposts:[]};}
 const shared = window.pulseShared;
+let sharedProfileStatus=shared?'loading':'ready';
 const stateKey = shared ? 'pulse-shared-ui:' + window.PULSE_CONFIG.url : 'pulse-demo-v1';
 const myId = () => shared && window.pulseWallet.signed() ? shared.userId : 'me';
 let s=JSON.parse(localStorage.getItem(stateKey)||'null')||seed(), period=0, category=2, metric=0, tab=0,side='buy', query='',observer, uploadDB, urls={},noticeTimer;
@@ -564,7 +565,13 @@ function followedProfiles(){return s.profileFollows?.[myId()]||[];}
 function profile(id=myId()){
   if(id==='me')id=myId();
   const channel=chan(id), mine=id===myId();
-  if(!channel&&!mine)return '<h1>Profile</h1><p class="emptyView">Channel not found.</p>';
+  if(!channel&&!mine){
+    const heading='<h1>Profile</h1>';
+    if(sharedProfileStatus==='loading')return heading+'<p class="emptyView" role="status">Loading channel…</p>';
+    if(sharedProfileStatus==='failed')return heading+'<p class="emptyView" role="status">Could not load this channel.</p>'+
+      btn('Retry','retrySharedProfile','primary');
+    return heading+'<p class="emptyView">Channel not found.</p>';
+  }
   const owned=s.clips.filter(reel=>reel.owner===id);
   const items=mine&&tab?s.clips.filter(reel=>s[['','reposts','likes','saves'][tab]].includes(reel.id)):owned;
   const name=channel?.name||'My profile', handle=channel?.name.toLowerCase().replaceAll(/[^\p{L}\p{N}]+/gu,'_').replace(/^_|_$/g,'');
@@ -1026,6 +1033,7 @@ function toast(msg){$('#notice').textContent=msg;clearTimeout(noticeTimer);notic
 function channelForm(next){modal('<h2>Create channel</h2><form id="channel" data-next="'+next+'"><label>Channel name<input name="name" required maxlength="48"></label><button class="primary">Create channel</button></form>');}
 function create(){if(!self())return channelForm('create');modal('<h2>Create video</h2><form id="upload"><label>Video title<input name="title" required maxlength="90"></label><label>Video file<input type="file" name="video" required accept="video/*"></label><button class="primary">Publish video</button></form>');}
 function action(str,el){let [k,v,id]=str.split(':');
+if(k==='retrySharedProfile'&&shared)return loadShared();
 if(shared && ['channel','create','launch'].includes(k) && !window.pulseWallet.signed()){
   toast('Sign in with your wallet to publish.');return go('Login/profile');
 }
@@ -1104,8 +1112,23 @@ let sharedRead = 0;
 let sharedSignature = null;
 async function refreshShared() {
   const request = ++sharedRead;
-  const {creators, videos} = await shared.feed();
+  if(sharedProfileStatus==='failed'){
+    sharedProfileStatus='loading';
+    if(path()[0]==='Profile')render();
+  }
+  let feed;
+  try{feed=await shared.feed();}
+  catch(error){
+    if(request!==sharedRead)return;
+    if(sharedProfileStatus!=='ready'){
+      sharedProfileStatus='failed';
+      if(path()[0]==='Profile')render();
+    }
+    throw error;
+  }
   if(request !== sharedRead)return;
+  const {creators,videos}=feed;
+  sharedProfileStatus='ready';
   const signature = JSON.stringify({
     creators: creators.map(c=>[c.id,c.name,c.ticker,c.avatar_updated_at]),
     videos: videos.map(v=>[v.id,v.creator_id,v.title,v.created_at])
@@ -1209,8 +1232,12 @@ if(f.id==='launch'){let c=self(),symbol=d.get('symbol').toUpperCase();if(c.coin|
 if(f.id==='upload'){let file=d.get('video'),title=d.get('title').trim();if(!title||!file.type.startsWith('video/'))return toast('Enter a title and choose a video.');f.querySelector('button').disabled=true;try{let db=await dbReady,id=crypto.randomUUID();await new Promise((ok,no)=>{let tx=db.transaction('videos','readwrite');tx.objectStore('videos').put(file,id);tx.oncomplete=ok;tx.onabort=no;});urls[id]=URL.createObjectURL(file);s.clips.push({id,owner:'me',title,likes:0,views:[[Date.now(),0]]});tab=0;go('Profile');toast('Video published.');}catch{f.querySelector('button').disabled=false;return toast('Unable to save this video. Try a smaller file.');}}
 save();$('dialog').close();render();});
 window.addEventListener('hashchange',()=>{tab=0;render();window.scrollTo(0,0);});render();
+function loadShared(){
+  return refreshShared().catch(()=>{
+    if(path()[0]!=='Profile'||sharedProfileStatus==='ready')toast('Shared videos could not load. Refresh to retry.');
+  });
+}
 if(shared){
-  const loadShared=()=>refreshShared().catch(()=>toast('Shared videos could not load. Refresh to retry.'));
   loadShared();
   window.addEventListener('pageshow',event=>{if(event.persisted)loadShared();});
   document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!$('dialog').open)loadShared();});
