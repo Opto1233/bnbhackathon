@@ -105,6 +105,15 @@ function reelIcon(kind){
   return '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="'+socialIcons[kind]+'"/></svg>';
 }
 const demoStartedAt=Date.now();
+const demoMoments={
+  kimchi:{name:'Chopstick Crunch',description:'The chopsticks meet the bowl on the beat in Kimchi Crunch.',time:2.4,launcher:'Pim',offset:-260},
+  bot:{name:'Tiny Bot Wave',description:'Tiny Bot lifts its arm for a tiny wave.',time:3.2,launcher:'Jay',offset:-78}
+};
+function momentFor(reelId){return s.moments?.[reelId]||demoMoments[reelId];}
+function momentBadge(reel){
+  const moment=momentFor(reel.id);
+  return moment?btn(esc(moment.name),'reelMoment:'+esc(reel.id),'coinPill momentPill'):'';
+}
 let demoElapsed=0;
 const demoConversation=[
   ['1','Mina','That street looks completely different after dark.',-720],
@@ -137,9 +146,14 @@ function minutesAgo(time){
   return seconds<60?'Just now':seconds<3600?Math.floor(seconds/60)+'m ago':Math.floor(seconds/3600)+'h ago';
 }
 function activityRows(){
-  return recentDemoComments().slice(-3).reverse().map(({reel,author,text,time})=>{
+  const launches=Object.entries(demoMoments).filter(([reel,moment])=>momentFor(reel)===moment).map(([reel,moment])=>({
+    reel,author:moment.launcher,text:moment.name,time:demoStartedAt+moment.offset*1000,launch:true
+  }));
+  const events=[...recentDemoComments(),...launches].sort((a,b)=>b.time-a.time).slice(0,3);
+  return events.map(({reel,author,text,time,launch})=>{
     const item=clip(reel);
-    return item?link('<span class="socialAvatar">'+esc(author[0])+'</span><span class="activityCopy"><strong>'+esc(author)+'</strong> commented on <b>'+esc(item.title)+'</b><small>'+esc(text)+'</small></span><time datetime="'+new Date(time).toISOString()+'">'+minutesAgo(time)+'</time>','Clips/'+reel,'activityRow'):'';
+    const action=launch?' created a Moment Coin from ':' commented on ';
+    return item?link('<span class="socialAvatar">'+esc(author[0])+'</span><span class="activityCopy"><strong>'+esc(author)+'</strong>'+action+'<b>'+esc(item.title)+'</b><small>'+esc(text)+'</small></span><time datetime="'+new Date(time).toISOString()+'">'+minutesAgo(time)+'</time>','Clips/'+reel,'activityRow'):'';
   }).join('');
 }
 function tickDemoActivity(){
@@ -252,18 +266,30 @@ function feed(id){
     const coin=ch.coin?link('$'+esc(ch.coin),'Trading/'+ch.id,'coinPill'):'';
     return '<article class="reel" data-id="'+c.id+'"'+backdrop+'><video playsinline muted loop controls '+media+'></video>'+caption+
       '<button type="button" class="momentGesture" aria-label="Hold to create Moment Coin" title="Hold to create Moment Coin"></button>'+
-      '<div class="controls"><div class="byline">'+link(esc(ch.name),'Profile/'+ch.id)+coin+'</div><h3>'+esc(c.title)+'</h3>'+(demoReel(c.id)?'<span class="demoLabel">Demo activity</span>':'')+(hashtags?'<div class="reelHashtags">'+hashtags+'</div>':'')+'</div>'+reelActions(c)+'</article>';
+      '<div class="controls"><div class="byline">'+link(esc(ch.name),'Profile/'+ch.id)+coin+momentBadge(c)+'</div><h3>'+esc(c.title)+'</h3>'+(demoReel(c.id)?'<span class="demoLabel">Demo activity</span>':'')+(hashtags?'<div class="reelHashtags">'+hashtags+'</div>':'')+'</div>'+reelActions(c)+'</article>';
   }).join('')+'</div>';
 }
 function observe(){observer?.disconnect();const root=$('.feed');if(!root)return;observer=new IntersectionObserver(entries=>entries.forEach(e=>{let v=e.target.querySelector('video');if(e.isIntersecting){v.play().catch(()=>{});let c=clip(e.target.dataset.id);c.views.push([Date.now(),last(c.views)+1]);save();}else v.pause();}),{root,threshold:.65});root.querySelectorAll('article').forEach(el=>observer.observe(el));}
 let marketGroup='all';
+function momentMarket(){
+  const moments=s.clips.filter(reel=>momentFor(reel.id));
+  if(!moments.length)return '';
+  const rows=moments.map(reel=>{
+    const moment=momentFor(reel.id);
+    const imageStyle=image(reel);
+    const title=esc(moment.name), launcher=esc(moment.launcher||'You');
+    return '<button type="button" class="momentMarketRow" data-act="reelMoment:'+esc(reel.id)+'"><span class="assetArt" style="'+imageStyle+'" aria-hidden="true">'+(imageStyle?'':title[0])+'</span>'+
+      '<span><strong>'+title+'</strong><small>'+esc(reel.title)+' · Created by '+launcher+'</small></span><span class="momentMarketTime">'+momentTime(moment.time)+'</span></button>';
+  }).join('');
+  return '<section class="momentMarket"><h2>Moment Coins <span class="demoLabel">Demo</span></h2>'+rows+'</section>';
+}
 function marketHome(){
   const visible=s.channels.filter(c=>c.coin && (marketGroup==='all'||s.watchlist?.includes(c.id)));
   return '<div class="marketHome"><div class="balanceBlock"><div><small>BSC TESTNET · CHAIN 97</small><h1>Creator coins</h1><p>Choose a creator coin to trade with tBNB.</p></div></div>'+
   '<h2>Creator market</h2><div class="marketTabs">'+[['all','All coins'],['saved','Starred']].map(([k,v])=>chip(v,'group:'+k,k===marketGroup)).join('')+'</div>'+
   visible.map(c=>{const saved=s.watchlist?.includes(c.id);
     return '<div class="assetLine"><button class="assetOpen" data-go="Trading/'+c.id+'"><span class="assetArt" style="'+(c.id!=='me'?'background-image:url(media/'+c.id+'.jpg)':'')+'">'+esc(c.coin[0])+'</span><span class="assetName"><b>$'+esc(c.coin)+'</b><small>' +esc(c.name)+'</small></span><span class="assetPrice"><b>tBNB</b><small>BSC Testnet</small></span></button><button class="star" data-act="watch:'+c.id+'" aria-pressed="'+!!saved+'" aria-label="Starred '+esc(c.coin)+'">'+(saved?'★':'☆')+'</button></div>';
-  }).join('')+(visible.length?'':'<p class="emptyMarket">'+(marketGroup==='saved'?'Star a coin to add it to your watchlist.':'No creator coins available.')+'</p>')+'</div>';
+  }).join('')+(visible.length?'':'<p class="emptyMarket">'+(marketGroup==='saved'?'Star a coin to add it to your watchlist.':'No creator coins available.')+'</p>')+momentMarket()+'</div>';
 }
 function trade(id){
   if(!id)return marketHome();
@@ -409,15 +435,17 @@ function momentTime(seconds){
   return Math.floor(seconds/60)+':'+(seconds%60).toFixed(2).padStart(5,'0');
 }
 function openMoment(reel,source){
-  if(!reel||!source?.getAttribute('src'))return toast('This clip is unavailable.');
-  const existing=s.moments?.[reel.id];
-  const resume=!source.paused;
-  source.pause();
-  const start=existing?.time??source.currentTime;
+  if(!reel)return;
+  const media=source?.getAttribute('src')||(reel.owner==='me'?urls[reel.id]:'media/'+reel.id+'.mp4');
+  if(!media)return toast('This clip is unavailable.');
+  const existing=momentFor(reel.id);
+  const resume=source&&!source.paused;
+  source?.pause();
+  const start=existing?.time??source?.currentTime??0;
   modal('<section class="momentSheet"><h2>'+(existing?'Moment Coin':'Create Moment Coin')+'</h2>'+
     '<p class="momentSource">'+esc(reel.title)+' · '+esc(chan(reel.owner).name)+'</p>'+
-    '<video class="momentPreview" muted playsinline preload="auto" src="'+esc(source.getAttribute('src'))+'" aria-label="Selected frame"></video>'+
-    (existing?'<h3>'+esc(existing.name)+'</h3><p>'+esc(existing.description)+'</p><p>Frame '+momentTime(existing.time)+'</p><small>Saved on this device · Demo</small>':
+    '<video class="momentPreview" muted playsinline preload="auto" src="'+esc(media)+'" aria-label="Selected frame"></video>'+
+    (existing?'<h3>'+esc(existing.name)+'</h3><p>'+esc(existing.description)+'</p><p>Frame '+momentTime(existing.time)+' · Created by '+esc(existing.launcher||'You')+'</p><small>Demo Moment Coin</small>':
       '<form id="momentLaunch"><label class="momentTimeline">Choose a frame <output></output><input type="range" min="0" step=".01" value="0" disabled></label>'+
       '<label>Coin name<input name="name" maxlength="60" required></label>'+
       '<label>Description<textarea name="description" maxlength="220" rows="2" required></textarea></label>'+
@@ -456,11 +484,12 @@ function openMoment(reel,source){
     if(!name||!description){status.textContent='Enter a coin name and description.';return;}
     const latest=JSON.parse(localStorage.getItem('pulse-demo-v1')||'null');
     s.moments={...s.moments,...latest?.moments};
-    if(s.moments[reel.id]){
+    if(momentFor(reel.id)){
       status.textContent='This reel already has a Moment Coin. Reopen the clip editor to see it.';return;
     }
-    s.moments[reel.id]={name,description,time:Number(track.value),ownerId:reel.owner,clipId:reel.id};
+    s.moments[reel.id]={name,description,time:Number(track.value),ownerId:reel.owner,clipId:reel.id,launcher:self()?.name||'You'};
     try{save();}catch{delete s.moments[reel.id];status.textContent='Could not save this Moment Coin.';return;}
+    source?.closest('.reel')?.querySelector('.byline')?.insertAdjacentHTML('beforeend',momentBadge(reel));
     dialog.close();toast('Created '+name+' · Demo Moment Coin');
   });
   dialog.addEventListener('close',()=>{
@@ -511,6 +540,7 @@ if(k==='commentLike'){
   save();el.setAttribute('aria-pressed',String(liked));return;
 }
 if(k==='reelReport')return reportReel(clip(v));
+if(k==='reelMoment')return openMoment(clip(v),el.closest('.reel')?.querySelector('video'));
 if(k==='reelShare')return shareReel(clip(v));if(k==='reelTrade')return openReelTrade(clip(v),el.closest('.reel')?.querySelector('video'));if(k==='explore'){
   if(v==='leaderboard')return go('Search/Leaderboard');
   exploreTab=v;return go('Search');

@@ -146,3 +146,10 @@ dialog[open]:has(#reelTicket,.commentsSheet){animation:pulseSheetUp .24s cubic-b
 .commentTime{margin-left:5px}
 .chatBubble.incoming{align-self:flex-start;border-radius:13px 13px 13px 4px;background:#252820;color:#e8ecdf}
 .chatBubble.incoming small{display:block;margin-bottom:3px;color:#bac4af}
+
+.momentMarket{margin-top:24px}
+.momentMarket h2{display:flex;align-items:center;gap:8px}
+.momentMarketRow{display:grid;align-items:center;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;width:100%;text-align:left;border:0;border-top:1px solid #3a4033;border-radius:0;background:none;padding:9px 0;color:inherit;overflow-wrap:anywhere}
+.momentMarketRow small{display:block;color:#bbc4af}
+.momentMarketTime{color:#d6fa44;font-size:13px;font-variant-numeric:tabular-nums}
+.reelsPage .byline .momentPill{color:#eddfab;border-color:#a68a587f;background:#332a1fdd}
