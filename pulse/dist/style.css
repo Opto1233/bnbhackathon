@@ -225,13 +225,19 @@ dialog[open]:has(#momentTicket){background:#151815;border-color:#424b38}
 
 .marketHome{max-width:1160px}
 .marketScope{color:#acacb4;font-size:12px;margin:12px 0 6px}
-.marketRow{display:grid;grid-template-columns:minmax(150px,1fr) minmax(0,2.5fr) auto;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid #323237}
+.marketRow{display:grid;grid-template-columns:minmax(190px,1fr) minmax(0,3fr) auto;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid #323237}
 .marketIdentity,.marketActions{display:flex;align-items:center;gap:10px;min-width:0}
 .marketIdentity small{display:block;color:#aaaab2}
 .marketIdentity strong{overflow-wrap:anywhere}
 .marketActions{justify-content:flex-end}
 .marketTrade{display:inline-grid;place-items:center;min-height:38px;padding:0 12px;color:#d6fa44;background:#252a1a;border:1px solid #454e2e;border-radius:8px;font-weight:700}
-.marketStats{display:grid;grid-template-columns:1.35fr .85fr 1.1fr 1fr .8fr;align-items:center;gap:12px;min-width:0}
+.marketStats{min-width:0}
+.marketNumbers{display:grid;grid-template-columns:1.25fr .85fr 1.1fr .9fr 1fr .95fr;align-items:center;gap:12px}
+.marketAudit,.marketIdentityStats{display:flex;flex-wrap:wrap;gap:5px}
+.marketAudit{margin-top:9px}
+.marketIdentity .marketIdentityStats{display:flex;white-space:normal;overflow:visible;margin-top:6px}
+.marketBadge{display:inline-flex;align-items:baseline;gap:4px;padding:2px 5px;border:1px solid #303036;border-radius:5px;font-size:10px;color:#aaaab2}
+.marketBadge b{color:#dedee3;font-variant-numeric:tabular-nums}
 .marketStats small{display:block;color:#aaaab2;font-size:11px}
 .marketStat b{display:block;margin-top:3px;font-size:13px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .marketDataStatus{grid-column:1/-1}
@@ -244,5 +250,5 @@ dialog[open]:has(#momentTicket){background:#151815;border-color:#424b38}
   .marketStats{grid-row:2;grid-column:1/-1}
 }
 @media(max-width:440px){
-  .marketStats{grid-template-columns:repeat(3,minmax(0,1fr));row-gap:9px}
+  .marketNumbers{grid-template-columns:repeat(3,minmax(0,1fr));row-gap:9px}
 }

@@ -271,7 +271,29 @@ function feed(id){
 }
 function observe(){observer?.disconnect();const root=$('.feed');if(!root)return;observer=new IntersectionObserver(entries=>entries.forEach(e=>{let v=e.target.querySelector('video');if(e.isIntersecting){v.play().catch(()=>{});let c=clip(e.target.dataset.id);c.views.push([Date.now(),last(c.views)+1]);save();}else v.pause();}),{root,threshold:.65});root.querySelectorAll('article').forEach(el=>observer.observe(el));}
 let marketGroup='all';
-function marketStats({price,reserve,fills,format}){
+function marketBadge(label,value,explanation){
+  return '<span class="marketBadge" title="'+esc(explanation)+'"><span>'+label+'</span> <b>'+value+'</b></span>';
+}
+function marketAudit(holders,top10){
+  const unavailable='Unavailable for this market';
+  return '<div class="marketAudit" aria-label="Holder and audit metrics">'+[
+    ['Top 10',top10,'Share of circulating coins held by the ten largest wallets'],
+    ['Dev holdings',null,unavailable],['Snipers',null,unavailable],
+    ['Insiders',null,unavailable],['Bundlers',null,unavailable],
+    ['Holders',holders,'Wallets holding circulating coins'],
+    ['Blue-chip holders',null,unavailable],['LP burned',null,'No DEX pool'],
+    ['DEX paid',null,'DEXScreener payment status unavailable'],['Security',null,'No token safety rating available']
+  ].map(([label,value,description])=>marketBadge(label,value??'—',description)).join('')+'</div>';
+}
+function marketAge(timestamp){
+  if(!timestamp)return '—';
+  const minutes=Math.floor(Math.max(0,Date.now()-timestamp)/60000);
+  if(minutes<1)return '<1m';
+  if(minutes<60)return minutes+'m';
+  if(minutes<1440)return Math.floor(minutes/60)+'h';
+  return Math.floor(minutes/1440)+'d';
+}
+function marketStats({price,marketCap,holders,top10,fills,format}){
   const prices=fills.map(fill=>Number(format(BigInt(fill.amount)/BigInt(fill.quantity))));
   const first=prices[0], lastPrice=prices.at(-1);
   const change=prices.length>1&&first>0?(lastPrice-first)/first*100:null;
@@ -287,15 +309,19 @@ function marketStats({price,reserve,fills,format}){
   const volume=fills.reduce((sum,fill)=>sum+BigInt(fill.amount),0n);
   const buys=fills.filter(fill=>fill.side==='buy').length;
   const bnb=value=>value.replace(/(\.\d*?[1-9])0+$/,'$1').replace(/\.0+$/,'')+' tBNB';
-  return stat('Unit price',bnb(price))+
+  return '<div class="marketNumbers">'+stat('Price',bnb(price))+
     '<span class="marketSpark '+tone+'">'+chart+'</span>'+
-    stat('Curve reserve',bnb(reserve))+stat('Volume',bnb(format(volume)))+
-    stat('Trades','<span class="positive" title="Buys">'+fmt(buys)+' B</span> / <span class="negative" title="Sells">'+fmt(fills.length-buys)+' S</span>');
+    stat('Market cap',bnb(marketCap))+stat('DEX liquidity','<span title="No DEX pool">—</span>')+
+    stat('Volume',bnb(format(volume)))+
+    stat('Transactions',fmt(fills.length)+' <small><span class="positive" title="Buys">'+fmt(buys)+' B</span> / <span class="negative" title="Sells">'+fmt(fills.length-buys)+' S</span></small>')+
+    '</div>'+marketAudit(holders,top10);
 }
-function marketRow({name,detail,art,key,action,stats,creatorId}){
+function marketRow({name,detail,art,key,action,stats,creatorId,age,views}){
   const saved=s.watchlist?.includes(key);
   return '<article class="marketRow"><div class="marketIdentity"><span class="assetArt" aria-hidden="true" style="'+art+'">'+(art?'':esc(name[0]))+'</span>'+
-    '<div class="assetName"><strong>'+esc(name)+'</strong><small>'+detail+'</small></div></div>'+
+    '<div class="assetName"><strong>'+esc(name)+'</strong><small>'+detail+'</small><small class="marketIdentityStats">'+
+    marketBadge('Age',esc(marketAge(age)),'Time since launch')+marketBadge('Views',fmt(views),'Source reel views')+
+    marketBadge('Fee','0%','Pulse protocol fee')+'</small></div></div>'+
     '<div class="marketStats"'+(creatorId?' data-creator-stats="'+esc(creatorId)+'"':'')+'>'+stats+'</div>'+
     '<div class="marketActions">'+action+'<button class="star" data-act="watch:'+esc(key)+'" aria-pressed="'+!!saved+
     '" aria-label="Watchlist: '+esc(name)+'">'+(saved?'★':'☆')+'</button></div></article>';
@@ -304,13 +330,16 @@ function momentMarket(){
   const moments=s.clips.filter(reel=>momentFor(reel.id)&&(marketGroup==='all'||s.watchlist?.includes('moment-'+reel.id)));
   if(!moments.length)return '';
   const ledger=momentLedger();
-  return '<section class="momentMarket"><h2>Moment Coins <span class="demoLabel">Demo</span></h2><p class="marketScope">Volume, trades and price change use the last 20 recorded fills on this device.</p>'+
+  return '<section class="momentMarket"><h2>Moment Coins <span class="demoLabel">Demo</span></h2><p class="marketScope">Activity uses the last 20 demo fills on this device. Market cap uses circulating coins. — means unavailable.</p>'+
     moments.map(reel=>{
       const coin=momentFor(reel.id), position=momentPosition(ledger,reel.id);
       return marketRow({
         name:coin.name,detail:esc(reel.title)+' · '+momentTime(coin.time)+' · '+esc(coin.launcher||'You'),
-        art:image(reel),key:'moment-'+reel.id,action:btn('Trade','tradeMoment:'+esc(reel.id),'marketTrade'),
-        stats:marketStats({price:momentBNB(momentPrice(position.sold)),reserve:momentBNB(momentReserve(position.sold)),
+        art:image(reel),key:'moment-'+reel.id,views:last(reel.views),
+        age:coin.createdAt||(coin.offset?demoStartedAt+coin.offset*1000:null),action:btn('Trade','tradeMoment:'+esc(reel.id),'marketTrade'),
+        stats:marketStats({price:momentBNB(momentPrice(position.sold)),
+          marketCap:momentBNB(momentPrice(position.sold)*BigInt(position.sold)),
+          holders:position.owned>0?1:0,top10:position.owned>0?'100%':null,
           fills:position.fills||[],format:momentBNB})
       });
     }).join('')+'</section>';
@@ -320,10 +349,11 @@ function marketHome(){
   const moments=momentMarket();
   return '<div class="marketHome"><div class="balanceBlock"><div><small>BSC TESTNET · CHAIN 97</small><h1>Creator coins</h1><p>Choose a creator coin to trade with tBNB.</p></div></div>'+
     '<h2>Creator market</h2><div class="marketTabs">'+[['all','All coins'],['saved','Watchlist']].map(([k,v])=>chip(v,'group:'+k,k===marketGroup)).join('')+'</div>'+
-    (visible.length?'<p class="marketScope">Volume, trades and price change use the last 1,000 BSC Testnet blocks.</p>'+
+    (visible.length?'<p class="marketScope">Activity uses the last 1,000 BSC Testnet blocks. Market cap uses circulating coins. — means unavailable.</p>'+
       visible.map(c=>marketRow({
         name:'$'+c.coin,detail:esc(c.name),art:c.id==='me'?'':'background-image:url(media/'+encodeURIComponent(c.id)+'.jpg)',
-        key:c.id,action:link('Trade','Trading/'+c.id,'marketTrade'),creatorId:c.id,
+        key:c.id,views:s.clips.filter(reel=>reel.owner===c.id).reduce((total,reel)=>total+last(reel.views),0),
+        action:link('Trade','Trading/'+c.id,'marketTrade'),creatorId:c.id,
         stats:'<small class="marketDataStatus">Loading market data…</small>'
       })).join(''):'')+
     (!visible.length&&!moments?'<p class="emptyMarket">'+(marketGroup==='saved'?'Star a coin to add it to your watchlist.':'No coins available.')+'</p>':'')+moments+'</div>';
@@ -725,7 +755,7 @@ function openMoment(reel,source){
     if(momentFor(reel.id)){
       status.textContent='This reel already has a Moment Coin. Reopen the clip editor to see it.';return;
     }
-    s.moments[reel.id]={name,description,time:Number(track.value),crop:editor.crop,ownerId:reel.owner,clipId:reel.id,launcher:self()?.name||'You'};
+    s.moments[reel.id]={name,description,time:Number(track.value),crop:editor.crop,ownerId:reel.owner,clipId:reel.id,createdAt:Date.now(),launcher:self()?.name||'You'};
     try{save();}catch{delete s.moments[reel.id];status.textContent='Could not save this Moment Coin.';return;}
     source?.closest('.reel')?.querySelector('.byline')?.insertAdjacentHTML('beforeend',momentBadge(reel));
     dialog.close();toast('Created '+name+' · Demo Moment Coin');
