@@ -8,8 +8,23 @@ export type Board={id:string;revision:number;cards:(number|null)[];matched:numbe
 type Offer=Lot & {offerId:string;offerStatus:"requested"|"approved";unlockAt:number|null;expiresAt:number}
 export type Snapshot={actor:string;balance:number;items:Item[];listings:Lot[];receipts:Lot[];offers:Offer[];expiredOffers:{offerId:string;name:string;expiresAt:number}[];run:Board|null;totals:{sales:number;platform:number;burned:number}}
 export const cash=(n:number)=>(n/1e6).toLocaleString('en',{maximumFractionDigits:6})+' RELIC'
+let rehearsalKey: string | undefined
+function privateRehearsalKey() {
+ if(rehearsalKey)return rehearsalKey
+ const key='rofun.rehearsal.v1'
+ try {
+  rehearsalKey=localStorage.getItem(key)??undefined
+  if(!rehearsalKey){rehearsalKey=crypto.randomUUID();localStorage.setItem(key,rehearsalKey)}
+ } catch {
+  rehearsalKey??=crypto.randomUUID()
+ }
+ return rehearsalKey
+}
 export async function requestRelic(mode:string,role:string,data?:Record<string,unknown>):Promise<Snapshot>{
- const res=await fetch('/api/relic?'+new URLSearchParams({mode,role}),data?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}:{cache:'no-store'})
+ const headers=new Headers()
+ if(mode==='stage')headers.set('X-RoFun-Rehearsal',privateRehearsalKey())
+ if(data)headers.set('Content-Type','application/json')
+ const res=await fetch('/api/relic?'+new URLSearchParams({mode,role}),{method:data?'POST':'GET',headers,body:data?JSON.stringify(data):undefined,cache:'no-store'})
  const body=await res.json();if(!res.ok)throw Error(body.error||'Market unavailable');return body
 }
 export function Split({price}:{price:number}){

@@ -154,10 +154,12 @@ async function act(db,room,actor,b,mentor){
 export async function market(request,db){
  const json=(body,status=200)=>Response.json(body,{status,headers:noCache})
  try{
-  const user=request.headers.get('oai-authenticated-user-id')
-  check(user,'Sign in to play and trade.',401)
   const url=new URL(request.url),mode=url.searchParams.get('mode')??'shared'
   check(['shared','mentor','stage'].includes(mode),'Unknown market.',400)
+  const rehearsal=request.headers.get('x-rofun-rehearsal')
+  const guest=mode==='stage'&&rehearsal&&/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(rehearsal)
+  const user=request.headers.get('oai-authenticated-user-id')||(guest?'rehearsal:'+rehearsal:null)
+  check(user,'Sign in to play and trade.',401)
   const mentor=mode!=='shared',key=await playerCode(user)
   const actor=mentor?(url.searchParams.get('role')??'Seller'):'Explorer-'+key.slice(0,32)
   check(!mentor||roles.includes(actor),'Unknown mentor role.',400)
