@@ -165,12 +165,51 @@ dialog[open]:has(#reelTicket,#momentTicket,.commentsSheet){animation:pulseSheetU
 #momentCropHelp{margin:2px 0 8px;color:#c2c6b8;font-size:12px}
 
 
-.momentTradeStats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}
-.momentTradeStats div{min-width:0;padding:8px;border:1px solid #3e4533;border-radius:9px;background:#22261d}
-.momentTradeStats small,.momentTradeStats strong{display:block;font-size:12px;overflow-wrap:anywhere}
-.momentTradeStats small{color:#bcc6ae;margin-bottom:4px}
-.momentTradeProgress{display:block;color:#d4dec9;font-size:13px}
-.momentTradeProgress progress{display:block;width:100%;margin-top:5px;accent-color:#d6fa44}
+dialog[open]:has(#momentTicket){background:#151815;border-color:#424b38}
+.momentMarketHeader{display:flex;align-items:center;gap:9px;padding:0 34px 10px 0;border-bottom:1px solid #353c30}
+.momentMarketHeader strong{overflow-wrap:anywhere}
+.momentLauncherAvatar,.momentAssetArt{display:grid;place-items:center;flex:none;color:#d6fa44;background:#293721 center/cover;font-weight:750}
+.momentLauncherAvatar{width:32px;height:32px;border-radius:50%}
+.momentAsset{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;padding:12px 0 6px}
+.momentAssetArt{width:42px;height:42px;border-radius:11px}
+.momentAssetMeta{min-width:0}
+.momentAssetMeta h2{font-size:clamp(17px,4vw,23px);margin:0;line-height:1.2;overflow-wrap:anywhere}
+.momentAssetMeta button{text-align:left;overflow-wrap:anywhere}
+.momentAssetPrice{text-align:right}
+.momentAssetPrice strong{font-size:clamp(14px,4vw,20px);color:#e7f6bb;font-variant-numeric:tabular-nums}
+.momentAssetPrice small,.momentChartHeading small,.momentPlotScale,.momentPlotAxis,.momentTradeStats small{display:block;color:#b8c1ae;font-size:11px}
+.momentChart{margin:6px 0 12px;border:1px solid #384133;border-radius:12px;padding:8px;background:#101410}
+.momentChartHeading,.momentPlotAxis{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.momentChartOptions{display:flex;gap:4px}
+.momentChartOptions button{border:0;padding:5px 8px;background:transparent;color:#b8c1ae;font-size:12px}
+.momentChartOptions button[aria-pressed=true]{background:#293621;color:#e2f4ad}
+.momentPlot{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:stretch}
+.momentPlot svg{display:block;width:100%;height:clamp(86px,17dvh,140px);overflow:visible}
+.momentPlotScale{display:grid;align-content:space-between;text-align:right;padding:8px 0;font-variant-numeric:tabular-nums}
+.momentPlotScale.flat{align-content:center}
+.plotGrid,.plotGuide,.plotLine{fill:none;vector-effect:non-scaling-stroke}
+.plotGrid{stroke:#303930}
+.plotGuide{stroke:#788b56;stroke-dasharray:3 4}
+.plotLine{stroke:#d6fa44;stroke-width:2;stroke-linecap:round}
+.plotMarker{fill:#d6fa44;stroke:#151815;stroke-width:2}
+.momentChartEmpty{margin:0;min-height:100px;display:grid;place-items:center;color:#b8c1ae;font-size:13px;text-align:center}
+.momentPosition{padding:10px 12px;border:1px solid #414b35;border-radius:12px;background:#1d231b}
+.momentTradeStats{display:flex;justify-content:space-between;gap:10px;margin-bottom:9px}
+.momentTradeStats div+div{text-align:right}
+.momentTradeStats strong{display:block;font-size:17px;overflow-wrap:anywhere}
+.momentTradeProgress{display:block;color:#bfc9b7;font-size:12px}
+.momentTradeProgress strong{float:right}
+.momentTradeProgress progress{display:block;width:100%;height:6px;margin-top:5px;accent-color:#d6fa44}
+.momentFillList{margin-top:8px;font-size:13px}
+.momentFillList summary{padding:5px 0;cursor:pointer}
+.momentFillList summary span{color:#b8c1ae;margin-left:4px}
+.momentFillList ol{list-style:none;padding:0;margin:0;max-height:123px;overflow:auto}
+.momentFillList li{display:grid;grid-template-columns:44px 1fr auto;gap:6px;padding:4px 0;border-top:1px solid #353c30}
+#momentTicket .bought{color:#95eda9;fill:#95eda9}
+#momentTicket .sold{color:#ffa4a5;fill:#ffa4a5}
+.momentTradeFooter{border-top:1px solid #353c30;margin-top:6px;padding-top:7px}
+#momentOrder label{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0}
+#momentOrder input{width:min(60%,160px);margin:0}
 .momentOrderActions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px}
 .momentOrderActions button{min-height:44px}
 .momentOrderPreview:not([hidden]){display:grid;gap:7px;margin-top:12px;padding:10px;border:1px solid #4c563d;border-radius:9px}

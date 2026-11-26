@@ -418,28 +418,67 @@ function settleMoment(reelId,preview){
   const cash=BigInt(ledger.cash);
   if(buying&&cash<quote.amount)throw Error('Your demo tBNB balance is too low.');
   ledger.cash=String(cash+(buying?-quote.amount:quote.amount));
-  ledger.markets[reelId]={sold:quote.sold,owned:position.owned+(buying?quote.quantity:-quote.quantity)};
+  const fill={side:quote.side,quantity:quote.quantity,amount:String(quote.amount)};
+  ledger.markets[reelId]={sold:quote.sold,owned:position.owned+(buying?quote.quantity:-quote.quantity),
+    fills:[...(position.fills||[]),fill].slice(-20)};
   localStorage.setItem(momentTradeStorage,JSON.stringify(ledger));
   return quote;
 }
-function openMomentTrade(reel){
+function momentMarketChart(position,view){
+  const history=view==='fills';
+  const values=history?(position.fills||[]).map(fill=>BigInt(fill.amount)/BigInt(fill.quantity)):[momentPrice(0),momentPrice(momentCurveCap)];
+  if(!values.length)return '<p class="momentChartEmpty">Confirmed trades will appear here.</p>';
+  const min=values.reduce((a,b)=>a<b?a:b), max=values.reduce((a,b)=>a>b?a:b);
+  const y=value=>15+90*(1-Number(value-min)/Number(max-min||1n));
+  const points=values.map((value,i)=>[values.length===1?160:8+i*304/(values.length-1),max===min?60:y(value)]);
+  const mark=history?points.at(-1):[8+304*position.sold/momentCurveCap,y(momentPrice(position.sold))];
+  const dots=points.map(([x,y],index)=>history?'<circle cx="'+x+'" cy="'+y+'" r="3" class="'+((position.fills[index].side==='sell')?'sold':'bought')+'"/>':'').join('');
+  return '<div class="momentPlot"><svg viewBox="0 0 320 120" role="img" aria-label="'+(history?'Confirmed demo fill prices':'Bonding curve with current price marked')+'">'+
+    '<path class="plotGrid" d="M8 15H312 M8 60H312 M8 105H312"/>'+
+    '<path class="plotGuide" d="M8 '+mark[1]+'H312"/>'+
+    '<polyline class="plotLine" points="'+points.map(point=>point.join(',')).join(' ')+'"/>'+dots+
+    (history?'':'<circle class="plotMarker" cx="'+mark[0]+'" cy="'+mark[1]+'" r="5"/>')+'</svg>'+
+    '<div class="momentPlotScale'+(max===min?' flat':'')+'"><span>'+momentBNB(max)+'</span>'+(max===min?'':'<span>'+momentBNB(min)+'</span>')+'</div></div>'+
+    '<div class="momentPlotAxis"><span>'+(history?'First shown fill':'0 sold')+'</span><span>'+(history?'Latest fill':'500,000 sold')+'</span></div>';
+}
+function momentFillList(fills){
+  const rows=fills.slice().reverse().map(fill=>{
+    const buying=fill.side==='buy';
+    return '<li><strong class="'+(buying?'bought':'sold')+'">'+(buying?'Buy':'Sell')+'</strong><span>'+fmt(fill.quantity)+' coins</span><span>'+momentBNB(BigInt(fill.amount))+' tBNB</span></li>';
+  }).join('');
+  return '<details class="momentFillList"><summary>Recent trades <span>'+fills.length+'</span></summary>'+
+    (rows?'<ol>'+rows+'</ol>':'<p>No trades recorded yet.</p>')+'</details>';
+}
+function openMomentTrade(reel,view='curve'){
   const coin=reel&&momentFor(reel.id);
   if(!coin)return;
   const ledger=momentLedger(), position=momentPosition(ledger,reel.id);
   const reserve=momentReserve(position.sold);
   const complete=position.sold===momentCurveCap;
-  const label=esc(coin.name), reelId=esc(reel.id);
+  const label=esc(coin.name), reelId=esc(reel.id), launcher=esc(coin.launcher||'You'), fills=position.fills||[];
+  const imageStyle=image(reel), price=momentBNB(momentPrice(position.sold)), balance=momentBNB(BigInt(ledger.cash));
   modal('<section id="momentTicket" aria-label="Moment Coin trading">'+
-    '<div class="reelTradeHeading"><small>MOMENT MARKET · DEMO</small><strong>'+label+'</strong></div>'+
-    '<p class="momentSource">'+esc(reel.title)+' · '+btn('View captured frame','reelMoment:'+reelId,'subtle')+'</p>'+
-    '<div class="momentTradeStats"><div><small>Next coin</small><strong>'+momentBNB(momentPrice(position.sold))+' tBNB</strong></div>'+
-    '<div><small>Demo balance</small><strong>'+momentBNB(BigInt(ledger.cash))+' tBNB</strong></div>'+
-    '<div><small>Your coins</small><strong>'+fmt(position.owned)+'</strong></div></div>'+
-    '<label class="momentTradeProgress">Curve reserve · '+momentBNB(reserve)+' / 0.30 tBNB<progress max="'+momentTarget+'" value="'+reserve+'"></progress></label>'+
-    (complete?'<p>This coin has completed its demo curve.</p>':
-      '<form id="momentOrder"><label>Moment Coins<input name="quantity" type="number" min="1" max="1000000" step="1" value="100000" required></label>'+
-      '<div class="momentOrderActions"><button class="tradeBuy" type="submit" value="buy">Buy</button><button class="tradeSell" type="submit" value="sell">Sell</button></div></form>'+
-      '<div class="momentOrderPreview" hidden></div>')+'<p class="momentTradeStatus" role="status"></p></section>');
+    '<div class="momentMarketHeader"><span class="momentLauncherAvatar" aria-hidden="true">'+esc((coin.launcher||'You')[0])+'</span><strong>'+launcher+'</strong><span class="demoLabel">Demo</span></div>'+
+    '<div class="momentAsset"><span class="momentAssetArt" aria-hidden="true" style="'+imageStyle+'">'+(imageStyle?'':esc(coin.name[0]))+'</span>'+
+    '<div class="momentAssetMeta"><h2>'+label+'</h2>'+btn(esc(reel.title)+' ↗','reelMoment:'+reelId,'subtle')+'</div>'+
+    '<div class="momentAssetPrice"><strong>'+price+'</strong><small>tBNB per coin</small></div></div>'+
+    '<div class="momentChart"><div class="momentChartHeading"><div class="momentChartOptions" role="group" aria-label="Price chart">'+
+    '<button type="button" data-chart="curve" aria-pressed="'+(view==='curve')+'">Curve</button><button type="button" data-chart="fills" aria-pressed="'+(view==='fills')+'">Trade prices</button></div><small>tBNB</small></div>'+
+    '<div class="momentChartBody">'+momentMarketChart(position,view)+'</div></div>'+
+    '<div class="momentPosition"><div class="momentTradeStats"><div><small>Your coins</small><strong>'+fmt(position.owned)+'</strong></div>'+
+    '<div><small>Demo balance</small><strong>'+balance+' tBNB</strong></div></div>'+
+    '<label class="momentTradeProgress">Curve reserve <strong>'+momentBNB(reserve)+' / 0.30 tBNB</strong><progress max="'+momentTarget+'" value="'+reserve+'"></progress></label></div>'+
+    momentFillList(fills)+
+    '<div class="momentTradeFooter">'+(complete?'<p>This coin has completed its demo curve.</p>':
+      '<form id="momentOrder"><label>Quantity <input name="quantity" type="number" min="1" max="1000000" step="1" value="100000" required></label>'+
+      '<div class="momentOrderActions"><button class="tradeSell" type="submit" value="sell">Sell</button><button class="tradeBuy" type="submit" value="buy">Buy</button></div></form>'+
+      '<div class="momentOrderPreview" hidden></div>')+'<p class="momentTradeStatus" role="status"></p></div></section>');
+  const chartButtons=$('#momentTicket').querySelectorAll('[data-chart]');
+  for(const button of chartButtons)button.onclick=()=>{
+    view=button.dataset.chart;
+    for(const item of chartButtons)item.setAttribute('aria-pressed',String(item===button));
+    $('.momentChartBody').innerHTML=momentMarketChart(position,view);
+  };
   const form=$('#momentOrder');
   if(!form)return;
   const panel=$('.momentOrderPreview'), status=$('.momentTradeStatus');
@@ -464,7 +503,7 @@ function openMomentTrade(reel){
         const execute=()=>settleMoment(reel.id,quote);
         const fill=navigator.locks?await navigator.locks.request(momentTradeStorage,execute):execute();
         if(!status.isConnected||!$('dialog').open)return;
-        openMomentTrade(reel);
+        openMomentTrade(reel,view);
         $('.momentTradeStatus').textContent=(buy?'Bought ':'Sold ')+fmt(fill.quantity)+' coins for '+momentBNB(fill.amount)+' tBNB.';
       }catch(error){
         if(!status.isConnected)return;
