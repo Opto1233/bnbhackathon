@@ -973,10 +973,17 @@ document.addEventListener('input',e=>{if(e.target.id==='search'){query=e.target.
 const dbReady=!shared && new Promise((resolve,reject)=>{let req=indexedDB.open('pulse-clips',1);req.onupgradeneeded=()=>req.result.createObjectStore('videos');req.onerror=()=>reject(req.error);req.onsuccess=()=>resolve(req.result);});
 async function hydrate(){let db=await dbReady;let req=db.transaction('videos').objectStore('videos').openCursor();req.onsuccess=()=>{let cur=req.result;if(cur){urls[cur.key]=URL.createObjectURL(cur.value);cur.continue();}else if(['Clips','Profile','Search'].includes(path()[0]))render();};}
 let sharedRead = 0;
+let sharedSignature = null;
 async function refreshShared() {
   const request = ++sharedRead;
   const {creators, videos} = await shared.feed();
   if(request !== sharedRead)return;
+  const signature = JSON.stringify({
+    creators: creators.map(c=>[c.id,c.name,c.ticker]),
+    videos: videos.map(v=>[v.id,v.creator_id,v.title,v.created_at])
+  });
+  if(signature===sharedSignature)return;
+  sharedSignature=signature;
   const known = new Map(s.clips.filter(c=>c.shared).map(c=>[c.id,c]));
   s.channels = [...s.channels.filter(c=>!c.shared), ...creators.map(c=>({
     id:c.id, name:c.name, coin:c.ticker, walletId:c.wallet, shared:true, followers:[], following:0
@@ -1027,4 +1034,5 @@ if(shared){
   loadShared();
   window.addEventListener('pageshow',event=>{if(event.persisted)loadShared();});
   document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!$('dialog').open)loadShared();});
+  setInterval(()=>{if(!document.hidden&&!$('dialog').open)loadShared();},30000);
 }else hydrate().catch(()=>toast('This browser cannot store videos.'));
