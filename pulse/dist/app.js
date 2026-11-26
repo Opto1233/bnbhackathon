@@ -109,10 +109,24 @@ const demoMoments={
   kimchi:{name:'Chopstick Crunch',description:'The chopsticks meet the bowl on the beat in Kimchi Crunch.',time:2.4,launcher:'Pim',offset:-260},
   bot:{name:'Tiny Bot Wave',description:'Tiny Bot lifts its arm for a tiny wave.',time:3.2,launcher:'Jay',offset:-78}
 };
-function momentFor(reelId){return s.moments?.[reelId]||demoMoments[reelId];}
+function momentsFor(reelId){
+  const stored=s.moments?.[reelId];
+  if(Array.isArray(stored))return stored;
+  const coin=stored||demoMoments[reelId];
+  return coin?[coin]:[];
+}
+function momentFor(reelId,coinId){
+  const coins=momentsFor(reelId);
+  return coinId?coins.find(coin=>(coin.id||reelId)===coinId):coins[0];
+}
+function momentAction(action,reel,coin){
+  return action+':'+esc(reel.id)+(coin?.id?':'+esc(coin.id):'');
+}
 function momentBadge(reel){
-  const moment=momentFor(reel.id);
-  return moment?btn(esc(moment.name),'reelMoment:'+esc(reel.id),'coinPill momentPill'):'';
+  const coins=momentsFor(reel.id);
+  if(!coins.length)return '';
+  const label=coins.length===1?esc(coins[0].name):coins.length+' Moment Coins';
+  return btn(label,'reelMoment:'+esc(reel.id),'coinPill momentPill');
 }
 let demoElapsed=0;
 const demoConversation=[
@@ -146,7 +160,7 @@ function minutesAgo(time){
   return seconds<60?'Just now':seconds<3600?Math.floor(seconds/60)+'m ago':Math.floor(seconds/3600)+'h ago';
 }
 function activityRows(){
-  const launches=Object.entries(demoMoments).filter(([reel,moment])=>momentFor(reel)===moment).map(([reel,moment])=>({
+  const launches=Object.entries(demoMoments).filter(([reel,moment])=>momentFor(reel)?.offset===moment.offset).map(([reel,moment])=>({
     reel,author:moment.launcher,text:moment.name,time:demoStartedAt+moment.offset*1000,launch:true
   }));
   const events=[...recentDemoComments(),...launches].sort((a,b)=>b.time-a.time).slice(0,3);
@@ -270,7 +284,7 @@ function feed(id){
   }).join('')+'</div>';
 }
 function observe(){observer?.disconnect();const root=$('.feed');if(!root)return;observer=new IntersectionObserver(entries=>entries.forEach(e=>{let v=e.target.querySelector('video');if(e.isIntersecting){v.play().catch(()=>{});let c=clip(e.target.dataset.id);c.views.push([Date.now(),last(c.views)+1]);save();}else v.pause();}),{root,threshold:.65});root.querySelectorAll('article').forEach(el=>observer.observe(el));}
-let marketGroup='all';
+let marketGroup='creators';
 const marketDemoUsdRate=600;
 const marketUsdFormatter=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:6});
 function marketUsd(amount){
@@ -332,16 +346,17 @@ function marketRow({name,detail,art,key,action,stats,creatorId,age,views}){
     '" aria-label="Watchlist: '+esc(name)+'">'+(saved?'★':'☆')+'</button></div></article>';
 }
 function momentMarket(){
-  const moments=s.clips.filter(reel=>momentFor(reel.id)&&(marketGroup==='all'||s.watchlist?.includes('moment-'+reel.id)));
+  const moments=s.clips.flatMap(reel=>momentsFor(reel.id).map(coin=>({reel,coin,id:coin.id||reel.id})))
+    .filter(({id})=>marketGroup!=='saved'||s.watchlist?.includes('moment-'+id));
   if(!moments.length)return '';
   const ledger=momentLedger();
   return '<section class="momentMarket"><h2>Moment Coins <span class="demoLabel">Demo</span></h2><p class="marketScope">Activity uses the last 20 demo fills on this device. Market cap uses circulating coins. — means unavailable.</p>'+
-    moments.map(reel=>{
-      const coin=momentFor(reel.id), position=momentPosition(ledger,reel.id);
+    moments.map(({reel,coin,id})=>{
+      const position=momentPosition(ledger,id);
       return marketRow({
         name:coin.name,detail:esc(reel.title)+' · '+momentTime(coin.time)+' · '+esc(coin.launcher||'You'),
-        art:image(reel),key:'moment-'+reel.id,views:last(reel.views),
-        age:coin.createdAt||(coin.offset?demoStartedAt+coin.offset*1000:null),action:btn('Trade','tradeMoment:'+esc(reel.id),'marketTrade'),
+        art:image(reel),key:'moment-'+id,views:last(reel.views),
+        age:coin.createdAt||(coin.offset?demoStartedAt+coin.offset*1000:null),action:btn('Trade',momentAction('tradeMoment',reel,coin),'marketTrade'),
         stats:marketStats({marketCap:momentBNB(momentPrice(position.sold)*BigInt(position.sold)),
           holders:position.owned>0?1:0,top10:position.owned>0?'100%':null,
           fills:position.fills||[],format:momentBNB})
@@ -349,11 +364,14 @@ function momentMarket(){
     }).join('')+'</section>';
 }
 function marketHome(){
-  const visible=s.channels.filter(c=>c.coin&&(marketGroup==='all'||s.watchlist?.includes(c.id)));
-  const moments=momentMarket();
-  return '<div class="marketHome"><div class="balanceBlock"><div><small>BSC TESTNET · CHAIN 97</small><h1>Creator coins</h1><p>Market values use a demo rate of '+marketUsd(1)+' per tBNB.</p></div></div>'+
-    '<h2>Creator market</h2><div class="marketTabs">'+[['all','All coins'],['saved','Watchlist']].map(([k,v])=>chip(v,'group:'+k,k===marketGroup)).join('')+'</div>'+
-    (visible.length?'<p class="marketScope">Activity uses the last 1,000 BSC Testnet blocks. Market cap uses circulating coins. — means unavailable.</p>'+
+  const visible=marketGroup==='moments'?[]:s.channels.filter(c=>c.coin&&(marketGroup!=='saved'||s.watchlist?.includes(c.id)));
+  const moments=marketGroup==='creators'?'':momentMarket();
+  return '<div class="marketHome"><div class="balanceBlock"><div><small>BSC TESTNET · CHAIN 97</small><h1>Coin markets</h1><p>Market values use a demo rate of '+marketUsd(1)+' per tBNB.</p></div></div>'+
+    '<div class="marketTabs" role="group" aria-label="Coin markets">'+
+    [['creators','Creator Coins'],['moments','Moment Coins'],['saved','Watchlist']].map(([key,label])=>
+      '<button type="button" class="'+(key===marketGroup?'selected':'')+'" data-act="group:'+key+
+      '" aria-pressed="'+(key===marketGroup)+'">'+label+'</button>').join('')+'</div>'+
+    (visible.length?'<h2>Creator Coins</h2><p class="marketScope">Activity uses the last 1,000 BSC Testnet blocks. Market cap uses circulating coins. — means unavailable.</p>'+
       visible.map(c=>marketRow({
         name:'$'+c.coin,detail:esc(c.name),art:c.id==='me'?'':'background-image:url(media/'+encodeURIComponent(c.id)+'.jpg)',
         key:c.id,views:s.clips.filter(reel=>reel.owner===c.id).reduce((total,reel)=>total+last(reel.views),0),
@@ -538,18 +556,18 @@ function momentFillList(fills){
   return '<details class="momentFillList"><summary>Recent trades <span>'+fills.length+'</span></summary>'+
     (rows?'<ol>'+rows+'</ol>':'<p>No trades recorded yet.</p>')+'</details>';
 }
-function openMomentTrade(reel,view='curve'){
-  const coin=reel&&momentFor(reel.id);
+function openMomentTrade(reel,coin=momentFor(reel?.id),view='curve'){
   if(!coin)return;
-  const ledger=momentLedger(), position=momentPosition(ledger,reel.id);
+  const coinId=coin.id||reel.id;
+  const ledger=momentLedger(), position=momentPosition(ledger,coinId);
   const reserve=momentReserve(position.sold);
   const complete=position.sold===momentCurveCap;
-  const label=esc(coin.name), reelId=esc(reel.id), launcher=esc(coin.launcher||'You'), fills=position.fills||[];
+  const label=esc(coin.name), launcher=esc(coin.launcher||'You'), fills=position.fills||[];
   const imageStyle=image(reel), price=momentBNB(momentPrice(position.sold)), balance=momentBNB(BigInt(ledger.cash));
   modal('<section id="momentTicket" aria-label="Moment Coin trading">'+
     '<div class="momentMarketHeader"><span class="momentLauncherAvatar" aria-hidden="true">'+esc((coin.launcher||'You')[0])+'</span><strong>'+launcher+'</strong><span class="demoLabel">Demo</span></div>'+
     '<div class="momentAsset"><span class="momentAssetArt" aria-hidden="true" style="'+imageStyle+'">'+(imageStyle?'':esc(coin.name[0]))+'</span>'+
-    '<div class="momentAssetMeta"><h2>'+label+'</h2>'+btn(esc(reel.title)+' ↗','reelMoment:'+reelId,'subtle')+'</div>'+
+    '<div class="momentAssetMeta"><h2>'+label+'</h2>'+btn(esc(reel.title)+' ↗',momentAction('momentDetail',reel,coin),'subtle')+'</div>'+
     '<div class="momentAssetPrice"><strong>'+price+'</strong><small>tBNB per coin</small></div></div>'+
     '<div class="momentChart"><div class="momentChartHeading"><div class="momentChartOptions" role="group" aria-label="Price chart">'+
     '<button type="button" data-chart="curve" aria-pressed="'+(view==='curve')+'">Curve</button><button type="button" data-chart="fills" aria-pressed="'+(view==='fills')+'">Trade prices</button></div><small>tBNB</small></div>'+
@@ -577,7 +595,7 @@ function openMomentTrade(reel,view='curve'){
     if(!form.reportValidity())return;
     status.textContent='';panel.hidden=true;
     let quote;
-    try{quote=quoteMoment(momentPosition(momentLedger(),reel.id),event.submitter?.value==='sell'?'sell':'buy',form.elements.quantity.valueAsNumber);}
+    try{quote=quoteMoment(momentPosition(momentLedger(),coinId),event.submitter?.value==='sell'?'sell':'buy',form.elements.quantity.valueAsNumber);}
     catch(error){status.textContent=error.message;return;}
     const buy=quote.side==='buy', verb=buy?'Buy':'Sell';
     panel.hidden=false;
@@ -589,11 +607,11 @@ function openMomentTrade(reel,view='curve'){
     confirm.onclick=async()=>{
       confirm.disabled=true;
       try{
-        const execute=()=>settleMoment(reel.id,quote);
+        const execute=()=>settleMoment(coinId,quote);
         const fill=navigator.locks?await navigator.locks.request(momentTradeStorage,execute):execute();
         if(!status.isConnected||!$('dialog').open)return;
         if($('.marketHome'))render();
-        openMomentTrade(reel,view);
+        openMomentTrade(reel,coin,view);
         $('.momentTradeStatus').textContent=(buy?'Bought ':'Sold ')+fmt(fill.quantity)+' coins for '+momentBNB(fill.amount)+' tBNB.';
       }catch(error){
         if(!status.isConnected)return;
@@ -604,7 +622,9 @@ function openMomentTrade(reel,view='curve'){
 }
 function openReelTrade(reel,source){
   if(!reel)return;
-  if(momentFor(reel.id))return openMomentTrade(reel);
+  const coins=momentsFor(reel.id);
+  if(coins.length>1)return openMomentPicker(reel);
+  if(coins.length===1)return openMomentTrade(reel,coins[0]);
   const creator=chan(reel.owner);
   if(!creator?.coin)return openMoment(reel,source);
   modal('<div class="reelTradeHeading"><small>CREATOR MARKET</small><strong>'+esc(creator.name)+'</strong></div>'+
@@ -698,11 +718,17 @@ function momentCrop(video,canvas,initial,form){
   }
   return {crop,redraw};
 }
-function openMoment(reel,source){
+function openMomentPicker(reel){
+  modal('<section class="momentSheet"><h2>Moment Coins</h2><p class="momentSource">'+esc(reel.title)+'</p>'+
+    '<ul class="momentPicker">'+momentsFor(reel.id).map(coin=>'<li>'+
+      btn(esc(coin.name)+' · '+momentTime(coin.time),momentAction('momentDetail',reel,coin),'subtle')+
+      btn('Trade',momentAction('tradeMoment',reel,coin),'marketTrade')+'</li>').join('')+'</ul>'+
+    btn('Create another Moment Coin','newMoment:'+esc(reel.id),'primary')+'</section>');
+}
+function openMoment(reel,source,existing=momentFor(reel?.id)){
   if(!reel)return;
   const media=source?.getAttribute('src')||(reel.owner==='me'?urls[reel.id]:'media/'+reel.id+'.mp4');
   if(!media)return toast('This clip is unavailable.');
-  const existing=momentFor(reel.id);
   const hasCrop=!existing||Boolean(existing.crop);
   const resume=source&&!source.paused;
   source?.pause();
@@ -711,7 +737,9 @@ function openMoment(reel,source){
     '<p class="momentSource">'+esc(reel.title)+' · '+esc(chan(reel.owner).name)+'</p>'+
     '<video class="momentPreview" muted playsinline preload="auto" src="'+esc(media)+'"'+(hasCrop?' hidden':' aria-label="Selected frame"')+'></video>'+
     (hasCrop?'<canvas class="momentCrop" width="512" height="512" '+(existing?'role="img" aria-label="Cropped Moment Coin frame"':'tabindex="0" aria-label="Crop preview" aria-describedby="momentCropHelp"')+'></canvas>':'')+
-    (existing?'<h3>'+esc(existing.name)+'</h3><p>'+esc(existing.description)+'</p><p>Frame '+momentTime(existing.time)+' · Created by '+esc(existing.launcher||'You')+'</p><small>Demo Moment Coin</small><div class="momentDetailActions">'+btn('Trade','tradeMoment:'+esc(reel.id),'primary')+'</div>':
+    (existing?'<h3>'+esc(existing.name)+'</h3><p>'+esc(existing.description)+'</p><p>Frame '+momentTime(existing.time)+' · Created by '+esc(existing.launcher||'You')+'</p><small>Demo Moment Coin</small><div class="momentDetailActions">'+btn('Trade',momentAction('tradeMoment',reel,existing),'primary')+
+      btn('Create another Moment Coin','newMoment:'+esc(reel.id),'subtle')+
+      (momentsFor(reel.id).length>1?btn('All moments','reelMoment:'+esc(reel.id),'subtle'):'')+'</div>':
       '<form id="momentLaunch"><label class="momentTimeline">Choose a frame <output></output><input name="frame" type="range" min="0" step=".01" value="0" disabled></label>'+
       '<div class="momentCropControls"><label class="momentZoom">Zoom <output>1.00×</output><input name="zoom" type="range" min="1" max="4" step=".05" value="1"></label><button type="button" class="subtle momentCropReset">Reset crop</button></div>'+
       '<p id="momentCropHelp">Drag the frame or use arrow keys to position it.</p>'+
@@ -756,13 +784,23 @@ function openMoment(reel,source){
     if(!name||!description){status.textContent='Enter a coin name and description.';return;}
     const latest=JSON.parse(localStorage.getItem('pulse-demo-v1')||'null');
     s.moments={...s.moments,...latest?.moments};
-    if(momentFor(reel.id)){
-      status.textContent='This reel already has a Moment Coin. Reopen the clip editor to see it.';return;
+    const previous=s.moments[reel.id], coins=momentsFor(reel.id);
+    const coin={name,description,time:Number(track.value),crop:editor.crop,ownerId:reel.owner,clipId:reel.id,
+      createdAt:Date.now(),launcher:self()?.name||'You'};
+    // Keep the first coin on the original reel key so existing holdings stay attached.
+    if(coins.length)coin.id=crypto.randomUUID();
+    s.moments[reel.id]=[...coins,coin];
+    try{save();}catch{
+      if(previous===undefined)delete s.moments[reel.id];
+      else s.moments[reel.id]=previous;
+      status.textContent='Could not save this Moment Coin.';return;
     }
-    s.moments[reel.id]={name,description,time:Number(track.value),crop:editor.crop,ownerId:reel.owner,clipId:reel.id,createdAt:Date.now(),launcher:self()?.name||'You'};
-    try{save();}catch{delete s.moments[reel.id];status.textContent='Could not save this Moment Coin.';return;}
-    source?.closest('.reel')?.querySelector('.byline')?.insertAdjacentHTML('beforeend',momentBadge(reel));
-    dialog.close();toast('Created '+name+' · Demo Moment Coin');
+    const byline=[...document.querySelectorAll('.reel')].find(item=>item.dataset.id===reel.id)?.querySelector('.byline');
+    const badge=byline?.querySelector('.momentPill');
+    if(badge)badge.outerHTML=momentBadge(reel);
+    else byline?.insertAdjacentHTML('beforeend',momentBadge(reel));
+    openMoment(reel,source,coin);
+    toast('Created '+name+' · Demo Moment Coin');
   });
   dialog.addEventListener('close',()=>{
     if(resume&&source.isConnected)source.play().catch(()=>{});
@@ -812,8 +850,17 @@ if(k==='commentLike'){
   save();el.setAttribute('aria-pressed',String(liked));return;
 }
 if(k==='reelReport')return reportReel(clip(v));
-if(k==='tradeMoment')return openMomentTrade(clip(v));
-if(k==='reelMoment')return openMoment(clip(v),el.closest('.reel')?.querySelector('video'));
+if(k==='tradeMoment'||k==='momentDetail'||k==='reelMoment'||k==='newMoment'){
+  const reel=clip(v);
+  if(!reel)return;
+  const source=el.closest('.reel')?.querySelector('video');
+  if(k==='newMoment')return openMoment(reel,source,null);
+  const coin=momentFor(v,id);
+  if(k==='tradeMoment')return coin&&openMomentTrade(reel,coin);
+  if(k==='reelMoment'&&momentsFor(v).length>1)return openMomentPicker(reel);
+  if(id&&!coin)return;
+  return openMoment(reel,source,coin);
+}
 if(k==='reelShare')return shareReel(clip(v));if(k==='reelTrade')return openReelTrade(clip(v),el.closest('.reel')?.querySelector('video'));if(k==='explore'){
   if(v==='leaderboard')return go('Search/Leaderboard');
   exploreTab=v;return go('Search');

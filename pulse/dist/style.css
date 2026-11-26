@@ -255,3 +255,10 @@ dialog[open]:has(#momentTicket){background:#151815;border-color:#424b38}
 @media(max-width:440px){
   .marketNumbers{grid-template-columns:repeat(3,minmax(0,1fr));row-gap:9px}
 }
+
+.marketHome .marketTabs{margin-bottom:16px;gap:clamp(8px,3vw,24px);flex-wrap:wrap}
+.marketHome .momentMarket{margin-top:0}
+.momentDetailActions{display:flex;flex-wrap:wrap;gap:8px}
+.momentPicker{list-style:none;margin:12px 0;padding:0}
+.momentPicker li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;border-top:1px solid #353c30;padding:9px 0}
+.momentPicker li .subtle{text-align:left;overflow-wrap:anywhere}
