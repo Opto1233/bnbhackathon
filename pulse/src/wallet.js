@@ -23,8 +23,13 @@ async function login(provider){
   use(provider);
   await provider.request({method:'eth_requestAccounts'});
   if(BigInt(await provider.request({method:'eth_chainId'}))!==97n){
-    try{await provider.request({method:'wallet_switchEthereumChain',params:[{chainId:'0x61'}]});}
-    catch(e){if(e.code!==4902)throw e;await provider.request({method:'wallet_addEthereumChain',params:[{chainId:'0x61',chainName:'BSC Testnet',nativeCurrency:{name:'Test BNB',symbol:'tBNB',decimals:18},rpcUrls:[rpc],blockExplorerUrls:[explorer]}]});}
+    const switchToTestnet=()=>provider.request({method:'wallet_switchEthereumChain',params:[{chainId:'0x61'}]});
+    try{await switchToTestnet();}
+    catch(e){
+      if(Number(e.code)!==4902&&Number(e.data?.originalError?.code)!==4902)throw e;
+      await provider.request({method:'wallet_addEthereumChain',params:[{chainId:'0x61',chainName:'BSC Testnet',nativeCurrency:{name:'Test BNB',symbol:'tBNB',decimals:18},rpcUrls:[rpc],blockExplorerUrls:[explorer]}]});
+      if(BigInt(await provider.request({method:'eth_chainId'}))!==97n)await switchToTestnet();
+    }
   }
   const signer=await new BrowserProvider(provider).getSigner(),addr=await signer.getAddress();
   const msg=location.host+' wants you to sign in with your Ethereum account:\n'+addr+'\n\nSign in to trade Pulse creator coins on BSC Testnet.\n\nURI: '+location.origin+'\nVersion: 1\nChain ID: 97\nNonce: '+hexlify(randomBytes(16)).slice(2)+'\nIssued At: '+new Date().toISOString();
@@ -190,6 +195,17 @@ function panel(root,creator,side){
     }).className=buy?'tradeBuy':'tradeSell';
   })().catch(e=>{status.textContent='Could not load testnet market: '+(e.shortMessage||e.message);button('Retry',async()=>refresh());});
 }
+function loginError(error){
+  const code=error.code;
+  const message=error.message||'';
+  if(Number(code)===4001||code==='ACTION_REJECTED')return 'Sign-in canceled. You can try again or browse as a guest.';
+  if(Number(code)===-32002)return 'Open MetaMask and finish the pending sign-in request.';
+  if(/URI which is not allowed|Domain that does not match/i.test(message))return 'This Pulse address is not enabled for wallet sign-in. Ask your project owner to add it to Supabase Authentication.';
+  if(code==='web3_provider_disabled')return 'Ethereum wallet sign-in is disabled for this Pulse project.';
+  if(/Wallet (or network )?changed/i.test(message))return 'Your wallet or network changed. Select BSC Testnet and try again.';
+  return 'Could not sign in. Unlock MetaMask, check that BSC Testnet is selected, and try again.';
+}
+
 function loginPage(root,complete){
   root.replaceChildren();
   if(signed()){
@@ -205,7 +221,7 @@ function loginPage(root,complete){
       if(working)return;
       working=true;b.disabled=true;status.textContent='Confirm the sign-in message in your wallet.';
       try{await login(provider);if(location.hash.startsWith('#Login'))complete();refresh();}
-      catch(e){status.textContent=e.code===4001||e.code==='ACTION_REJECTED'?'Sign-in canceled. You can try again or browse as a guest.':'Could not sign in. Check your wallet and try again.';}
+      catch(e){status.textContent=loginError(e);}
       finally{working=false;b.disabled=false;}
     };root.append(b);
   }
