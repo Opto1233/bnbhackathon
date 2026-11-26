@@ -1,20 +1,29 @@
 import { shared } from './shared.js';
 window.pulseShared = shared;
-import { BrowserProvider, JsonRpcProvider, Contract, getCreate2Address, id, keccak256, concat, formatEther, verifyMessage, hexlify, randomBytes } from 'ethers';
+import { BrowserProvider, JsonRpcProvider, FallbackProvider, Contract, getCreate2Address, id, keccak256, concat, formatEther, verifyMessage, hexlify, randomBytes } from 'ethers';
 import market from './market.json';
 const rpc='https://bsc-testnet-rpc.publicnode.com', explorer='https://testnet.bscscan.com';
 const factory='0x4e59b44847b379578588920cA78FbF26c0B4956C';
 const proxyCode='0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf3';
 const salt=id('Pulse Bangkok creator market v1'),address=getCreate2Address(factory,salt,keccak256(market.bytecode));
-const reader=new JsonRpcProvider(rpc,97,{staticNetwork:true,batchMaxCount:1});
+const reader=new FallbackProvider([rpc,'https://data-seed-prebsc-1-s1.bnbchain.org:8545'].map((url,i)=>({
+  provider:new JsonRpcProvider(url,97,{staticNetwork:true,batchMaxCount:1}), priority:i+1,weight:1,stallTimeout:1500
+})),97,{quorum:1});
 const marketRead=new Contract(address,market.abi,reader);
+const legacy=new Contract('0xdaB865af904e739e55A4b0510CF4FE379E7f8B23',market.abi,reader);
+const legacyHash='0x2bd4640e4c188025e4753544da74e0443c4e71c528a6c93cc7e7ec7cc109f692';
+let legacyAvailable;
+async function marketFor(key){
+  if(legacyAvailable===undefined) legacyAvailable=keccak256(await reader.getCode(legacy.target))===legacyHash;
+  return key && legacyAvailable && await legacy.listed(key) ? legacy : marketRead;
+}
 let wallet,account,sessionUntil=0,version=0,working=false;
 const wallets=new Map();
 window.addEventListener('eip6963:announceProvider',e=>wallets.set(e.detail.provider,e.detail.info.name));
 window.dispatchEvent(new Event('eip6963:requestProvider'));
 const node=(tag,text)=>Object.assign(document.createElement(tag),{textContent:text});
 const pretty=x=>formatEther(x).replace(/(\.\d{9})\d+$/,'$1');
-function clear(){shared?.logout();account=null;sessionUntil=0;version++;refresh();}
+function clear(){sessionStorage.removeItem("pulse:wallet-session");shared?.logout();account=null;sessionUntil=0;version++;refresh();}
 function signed(){return account&&Date.now()<sessionUntil;}
 function use(provider){
   if(wallet!==provider){wallet?.removeListener?.('accountsChanged',clear);wallet?.removeListener?.('chainChanged',clear);wallet=provider;wallet.on?.('accountsChanged',clear);wallet.on?.('chainChanged',clear);}
@@ -38,12 +47,13 @@ async function login(provider){
     }
   }
   account=addr;sessionUntil=Date.now()+3600000;
+  sessionStorage.setItem('pulse:wallet-session',JSON.stringify({addr,until:sessionUntil}));
 }
 async function signerNow(){
   if(!signed()||BigInt(await wallet.request({method:'eth_chainId'}))!==97n)throw Error('Please sign in on BSC Testnet.');
   const signer=await new BrowserProvider(wallet).getSigner();if(await signer.getAddress()!==account)throw Error('Wallet changed. Sign in again.');return signer;
 }
-async function ready(){const code=await reader.getCode(address);if(code==='0x')return false;if(code!==market.runtime)throw Error('Market bytecode mismatch.');return true;}
+async function ready(contract=marketRead){if(contract===legacy)return true;const code=await reader.getCode(address);if(code==='0x')return false;if(code!==market.runtime)throw Error('Market bytecode mismatch.');return true;}
 function refresh(){window.dispatchEvent(new Event('pulse-wallet-change'));}
 const tokenId=c=>c.walletId || (c.id==='me'?null:c.id);
 async function portfolio(root,creators){
@@ -54,16 +64,17 @@ async function portfolio(root,creators){
   body.textContent='Loading holdings…';
   try{
     const blockTag=await reader.getBlockNumber(),options={blockTag};
-    const [cash,exists]=await Promise.all([reader.getBalance(owner,blockTag),ready()]);
-    const coins=creators.filter(c=>tokenId(c)&&c.coin);
-    const balances=exists?await marketRead.balanceOfBatch(coins.map(()=>owner),coins.map(tokenId),options):[];
-    const rows=await Promise.all(coins.flatMap((c,i)=>{
-      const qty=balances[i];if(!qty)return [];
-      return [marketRead.supply(tokenId(c),options).then(async supply=>{
-        const [before,after]=await Promise.all([marketRead.reserve(supply,options),marketRead.reserve(supply-qty,options)]);
-        return {c,qty,value:before-after};
-      })];
+    const cash=await reader.getBalance(owner,blockTag);
+    const balances=await Promise.all(creators.filter(c=>tokenId(c)&&c.coin).map(async c=>{
+      const key=tokenId(c), contract=await marketFor(key);
+      if(!await ready(contract)) return null;
+      const qty=await contract.balanceOf(owner,key,options);
+      if(!qty)return null;
+      const supply=await contract.supply(key,options);
+      const [before,after]=await Promise.all([contract.reserve(supply,options),contract.reserve(supply-qty,options)]);
+      return {c,qty,value:before-after};
     }));
+    const rows=balances.filter(Boolean);
     if(!body.isConnected||owner!==account)return;
     const total=rows.reduce((sum,r)=>sum+r.value,cash);
     body.replaceChildren(node('strong',pretty(total)+' tBNB'),node('p','Wallet cash: '+pretty(cash)+' tBNB'));
@@ -83,14 +94,14 @@ function drawPrices(root,values){
 async function priceHistory(root,key){
   root.replaceChildren(node('h3','Trade price'),node('small','Loading on-chain trades…'));
   try{
-    const exists=await ready();
+    const contract=await marketFor(key), exists=await ready(contract);
     let logs=[];
-    if(exists&&key){const end=await reader.getBlockNumber();logs=await marketRead.queryFilter(marketRead.filters.Trade(key),Math.max(0,end-999),end);}
+    if(exists&&key){const end=await reader.getBlockNumber();logs=await contract.queryFilter(contract.filters.Trade(key),Math.max(0,end-999),end);}
     root.replaceChildren(node('h3','Trade price'));
     if(!logs.length){
       root.append(node('p',exists?'No trades in the last 1,000 blocks.':'No trades yet. The testnet market has not launched.'));
       if(key){
-        const start=exists?await marketRead.supply(key):0n;
+        const start=exists?await contract.supply(key):0n;
         root.append(node('h4','Projected buy price'));
         // One-unit buy quote from Pulse.reserve(n + 1) - Pulse.reserve(n).
         const previews=[0,25,50,75,100].map(n=>Number(formatEther(1000000000000n+1000000000n*(2n*(start+BigInt(n))+1n))));
@@ -107,21 +118,17 @@ async function priceHistory(root,key){
 async function marketSnapshot(creators){
   const rows=new Map();
   const blockTag=await reader.getBlockNumber();
-  const listedMarket=await ready();
-  const keys=creators.map(tokenId).filter(Boolean);
-  const logs=listedMarket&&keys.length
-    ?await marketRead.queryFilter(marketRead.filters.Trade(keys),Math.max(0,blockTag-999),blockTag)
-    :[];
   await Promise.allSettled(creators.map(async creator=>{
-    const key=tokenId(creator);
-    if(!listedMarket||!key||!await marketRead.listed(key,{blockTag})){
+    const key=tokenId(creator),contract=await marketFor(key),listedMarket=await ready(contract);
+    if(!listedMarket||!key||!await contract.listed(key,{blockTag})){
       rows.set(creator.id,{status:'Market not launched'});
       return;
     }
-    const [price,supply]=await Promise.all([
-      marketRead.quote(key,1,true,{blockTag}),
-      marketRead.supply(key,{blockTag})
+    const [supply,logs]=await Promise.all([
+      contract.supply(key,{blockTag}),contract.queryFilter(contract.filters.Trade(key),Math.max(0,blockTag-999),blockTag)
     ]);
+    const reserves=await Promise.all([contract.reserve(supply+1n,{blockTag}),contract.reserve(supply,{blockTag})]);
+    const price=reserves[0]-reserves[1];
     const fills=logs.filter(log=>log.args.id===BigInt(key)).map(({args})=>({
       side:args.bought?'buy':'sell', amount:args.amount, quantity:args.quantity
     }));
@@ -136,7 +143,8 @@ function panel(root,creator,side){
   root.replaceChildren(node('h2','$'+creator.coin),node('small','BSC Testnet · Chain 97'),info,actions,status);
   const chart=node('section','');chart.className='priceHistory';root.insertBefore(chart,info);priceHistory(chart,token);
   const faucet=node('a','Get test tBNB');faucet.href='https://docs.bnbchain.org/bnb-smart-chain/developers/faucet/';faucet.target='_blank';faucet.rel='noopener';root.append(faucet);
-  const lastTx=sessionStorage.getItem('pulse:lastTx');if(/^0x[0-9a-f]{64}$/i.test(lastTx||'')){const receipt=node('a','Latest transaction ↗');receipt.href=explorer+'/tx/'+lastTx;receipt.target='_blank';receipt.rel='noopener';root.append(receipt);}
+  const txKey='pulse:lastTx:97:'+account+':'+creator.id;
+  const lastTx=sessionStorage.getItem(txKey);if(/^0x[0-9a-f]{64}$/i.test(lastTx||'')){const receipt=node('a','Latest transaction ↗');receipt.href=explorer+'/tx/'+lastTx;receipt.target='_blank';receipt.rel='noopener';root.append(receipt);}
   const sheet=root.id==='reelTicket';
   if(sheet){
     actions.className='creatorActions';
@@ -149,7 +157,7 @@ function panel(root,creator,side){
     info.append(row);
   }
   function button(label,fn){const b=node('button',label);actions.append(b);b.onclick=async()=>{if(working)return;working=true;status.textContent='Waiting…';try{await fn();}catch(e){status.textContent=e.code===4001||e.code==='ACTION_REJECTED'?'Wallet request canceled.':String(e.shortMessage||e.message||e).slice(0,200);}finally{working=false;}};return b;}
-  async function receipt(tx){sessionStorage.setItem('pulse:lastTx',tx.hash);const a=node('a','Pending transaction ↗');a.href=explorer+'/tx/'+tx.hash;a.target='_blank';a.rel='noopener';status.replaceChildren(a);await tx.wait(1);refresh();}
+  async function receipt(tx){sessionStorage.setItem(txKey,tx.hash);const a=node('a','Pending transaction ↗');a.href=explorer+'/tx/'+tx.hash;a.target='_blank';a.rel='noopener';status.replaceChildren(a);await tx.wait(1);refresh();}
   if(!signed()){
     info.textContent='Sign in with your wallet to buy or sell. Network fees use test tBNB.';
     button('Sign in with wallet',async()=>{root.closest('dialog')?.close();location.hash='Login/'+encodeURIComponent(creator.id);});
@@ -157,20 +165,23 @@ function panel(root,creator,side){
   }
   info.textContent=account.slice(0,6)+'…'+account.slice(-4);status.textContent='Loading market…';
   (async()=>{
-    const [exists,balance]=await Promise.all([ready(),reader.getBalance(account)]);
+    const selected=await marketFor(token);
+    const [exists,balance]=await Promise.all([ready(selected),reader.getBalance(account)]);
     if(current!==version||!root.isConnected)return;
     if(sheet)sheetStat('Wallet balance',pretty(balance)+' tBNB');
     else info.textContent+=' · '+pretty(balance)+' tBNB';
     status.textContent='';
     if(!exists){status.textContent='One-time shared market deployment required. Your wallet pays testnet gas.';button('Deploy testnet market',async()=>{const signer=await signerNow();if(await reader.getCode(factory)!==proxyCode)throw Error('Deployment proxy mismatch.');if(await ready()){refresh();return;}await receipt(await signer.sendTransaction({to:factory,data:concat([salt,market.bytecode]),chainId:97}));});return;}
     let key=token||account;
-    if(!await marketRead.listed(key)){
-      if((creator.id==='me'||creator.id===shared?.userId)&&(!token||token.toLowerCase()===account.toLowerCase()))button('Launch wallet creator coin',async()=>{const contract=marketRead.connect(await signerNow());const owner=account;const tx=await contract.launch({chainId:97});await receipt(tx);window.dispatchEvent(new CustomEvent('pulse-creator-linked',{detail:owner}));});
+    if(!await selected.listed(key)){
+      status.textContent='This creator has not opened the market yet.';
+      if((creator.id==='me'||creator.id===shared?.userId)&&(!token||token.toLowerCase()===account.toLowerCase()))button('Launch wallet creator coin',async()=>{const contract=selected.connect(await signerNow());const owner=account;const tx=await contract.launch({chainId:97});await receipt(tx);window.dispatchEvent(new CustomEvent('pulse-creator-linked',{detail:owner}));});
       return;
     }
     if(!token&&creator.id==='me'){window.dispatchEvent(new CustomEvent('pulse-creator-linked',{detail:account}));return;}
-    const owned=await marketRead.balanceOf(account,key),unit=await marketRead.quote(key,1,true);
+    const owned=await selected.balanceOf(account,key),nSold=await selected.supply(key),unit=(await selected.reserve(nSold+1n))-(await selected.reserve(nSold));
     if(current!==version||!root.isConnected)return;
+    info.append(node('small',selected===legacy?'Legacy demo market · uncapped supply':'Demo supply cap · 1,000,000 coins'));
     if(sheet){
       sheetStat('Your coins',owned+' $'+creator.coin);
       const price=node('div','');
@@ -184,8 +195,8 @@ function panel(root,creator,side){
     const qty=node('input','');Object.assign(qty,{type:'number',min:'1',max:'1000000',step:'1',value:'1'});const label=node('label','Creator coins');label.append(qty);actions.append(label);
     for(const buy of (side?[side==='buy']:[true,false]))button(buy?'Buy':'Sell',async()=>{
       if(!qty.reportValidity()||!qty.value)return;const n=BigInt(qty.value);if(!buy&&n>owned)throw Error('Insufficient creator coins.');
-      const amount=await marketRead.quote(key,n,buy);actions.replaceChildren(node('p',(buy?'Buy ':'Sell ')+n+' $'+creator.coin+' · '+pretty(amount)+' tBNB + network gas'));
-      button('Confirm in wallet',async()=>{const c=marketRead.connect(await signerNow());const tx=buy?await c.buy(key,n,{value:amount,chainId:97}):await c.sell(key,n,amount,{chainId:97});await receipt(tx);});
+      const amount=await selected.quote(key,n,buy);actions.replaceChildren(node('p',(buy?'Buy ':'Sell ')+n+' $'+creator.coin+' · '+pretty(amount)+' tBNB + network gas'));
+      button('Confirm in wallet',async()=>{const c=selected.connect(await signerNow());const tx=buy?await c.buy(key,n,{value:amount,chainId:97}):await c.sell(key,n,amount,{chainId:97});await receipt(tx);});
       button('Back',async()=>refresh());status.textContent='';
     }).className=buy?'tradeBuy':'tradeSell';
   })().catch(e=>{status.textContent='Could not load testnet market: '+(e.shortMessage||e.message);button('Retry',async()=>refresh());});
@@ -211,4 +222,19 @@ function loginPage(root,complete){
   }
   root.append(status);
 }
-window.pulseWallet={panel,address,loginPage,signed,portfolio,marketSnapshot};
+window.pulseWallet={panel,address,loginPage,signed,account:()=>signed()?account:null,portfolio,marketSnapshot};
+
+async function restoreWallet(){
+  try{
+    const entry=JSON.parse(sessionStorage.getItem('pulse:wallet-session')||'null');
+    if(!entry || entry.until<=Date.now())return;
+    for(const provider of new Set([...wallets.keys(),window.ethereum].filter(Boolean))){
+      const [address]=await provider.request({method:'eth_accounts'});
+      if(address?.toLowerCase()!==entry.addr.toLowerCase()||BigInt(await provider.request({method:'eth_chainId'}))!==97n)continue;
+      if(shared&&!await shared.restore(address))return;
+      if(account)return;
+      use(provider);account=entry.addr;sessionUntil=entry.until;refresh();return;
+    }
+  }catch{ /* A disconnected wallet can sign in again. */ }
+}
+window.pulseWallet.restored=restoreWallet();

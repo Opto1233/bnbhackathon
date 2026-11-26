@@ -3,6 +3,9 @@ pragma solidity 0.8.30;
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
+import "@openzeppelin/contracts/utils/Strings.sol";
+import "@openzeppelin/contracts/utils/Base64.sol";
+
 /// One whole-unit token ID per creator. Reserve is the integral of the price curve.
 contract Pulse is ERC1155, ReentrancyGuard {
     mapping(uint256 => uint256) public supply;
@@ -12,6 +15,13 @@ contract Pulse is ERC1155, ReentrancyGuard {
         require(block.chainid == 97, "BSC testnet only");
         for (uint256 id = 1; id <= 4; ++id) listed[id] = true;
     }
+    function uri(uint256 id) public view override returns (string memory) {
+        require(listed[id], "Unknown creator");
+        bytes memory metadata = abi.encodePacked('{"name":"Pulse Creator Coin #', Strings.toString(id),
+            '","description":"Whole-unit Pulse creator coin on BSC Testnet.","decimals":0}');
+        return string.concat("data:application/json;base64,", Base64.encode(metadata));
+    }
+
     function launch() external {
         uint256 id = uint160(msg.sender);
         require(!listed[id], "Already listed");
@@ -23,6 +33,7 @@ contract Pulse is ERC1155, ReentrancyGuard {
     function quote(uint256 id, uint256 qty, bool buySide) public view returns (uint256) {
         require(listed[id] && qty > 0 && qty <= 1000000, "Invalid order");
         uint256 n = supply[id];
+        if (buySide) require(n + qty <= 1000000, "Supply cap reached");
         return buySide ? reserve(n + qty) - reserve(n) : reserve(n) - reserve(n - qty);
     }
     function buy(uint256 id, uint256 qty) external payable nonReentrant {

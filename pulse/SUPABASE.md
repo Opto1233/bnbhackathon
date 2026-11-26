@@ -67,3 +67,9 @@ For a hosted deployment, set the two variables in the host's **build environment
 Existing browser-only videos stay on the device that created them. To share an older upload, publish its original file through the configured app.
 
 [Supabase API keys](https://supabase.com/docs/guides/getting-started/api-keys) · [Web3 wallet sign-in](https://supabase.com/docs/guides/auth/auth-web3)
+
+## Shared demo community
+
+Apply all migrations in filename order, including `202611260005_demo_community.sql`. Signed-in users publish captured frames, comments, follows, likes and reports. Private messages require creator profiles and are readable only by their two participants. Moderators can review reports in the Supabase Table Editor with project administrator access. An upload can include an optional WebVTT file. Messages to built-in sample characters stay on the device.
+
+Moment trades use simulated balances for the current account and browser. The curve accepts redemptions at full reserve. A newly deployed Creator contract has a one-million outstanding supply limit and ERC-1155 metadata. Already-listed coins on the original testnet contract continue trading there under their original terms. Both versions use chain 97.

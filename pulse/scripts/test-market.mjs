@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import ganache from 'ganache';
 import {BrowserProvider,ContractFactory} from 'ethers';
-const rpc=ganache.provider({chain:{chainId:97},logging:{quiet:true}});
+const rpc=ganache.provider({chain:{chainId:97},logging:{quiet:true},wallet:{defaultBalance:5000}});
 try {
   const provider=new BrowserProvider(rpc), alice=await provider.getSigner(),bob=await provider.getSigner(1);
   const {abi,bytecode,runtime}=JSON.parse(fs.readFileSync('src/market.json'));
@@ -18,5 +18,13 @@ try {
   assert.equal(await c.supply(1),0n);
   await(await c.connect(bob).launch()).wait();
   assert.equal(await c.listed(BigInt(bob.address)),true);
+  const metadata=JSON.parse(Buffer.from((await c.uri(1)).split(',')[1],'base64').toString());
+  assert.match(metadata.name,/Pulse Creator Coin/);
+  const cap=1000000n,full=await c.quote(1,cap,true);
+  await(await c.buy(1,cap,{value:full})).wait();
+  await assert.rejects(c.quote(1,1,true));
+  await(await c.sell(1,cap,full)).wait();
+  assert.equal(await c.supply(1),0n);
+  console.log('Verified metadata, supply cap and full redemption.');
   console.log('Verified exact runtime, independent markets, purchase, sale, ownership and creator launch.');
 } finally {await rpc.disconnect();}
