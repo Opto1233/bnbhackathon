@@ -97,12 +97,23 @@ async function priceHistory(root,key){
 }
 function panel(root,creator,side){
   const current=++version;
-  const status=node('p',''),actions=node('div',''),info=node('p','');
+  const status=node('p',''),actions=node('div',''),info=node(root.id==='reelTicket'?'div':'p','');
   const token=creator.id==='me'?creator.walletId:creator.id;
   root.replaceChildren(node('h2','$'+creator.coin),node('small','BSC Testnet · Chain 97'),info,actions,status);
   const chart=node('section','');chart.className='priceHistory';root.insertBefore(chart,info);priceHistory(chart,token);
   const faucet=node('a','Get test tBNB');faucet.href='https://docs.bnbchain.org/bnb-smart-chain/developers/faucet/';faucet.target='_blank';faucet.rel='noopener';root.append(faucet);
   const lastTx=sessionStorage.getItem('pulse:lastTx');if(/^0x[0-9a-f]{64}$/i.test(lastTx||'')){const receipt=node('a','Latest transaction ↗');receipt.href=explorer+'/tx/'+lastTx;receipt.target='_blank';receipt.rel='noopener';root.append(receipt);}
+  const sheet=root.id==='reelTicket';
+  if(sheet){
+    actions.className='creatorActions';
+    root.append(status,actions);
+  }
+  function sheetStat(label,value){
+    const row=node('div','');
+    row.className='creatorStat';
+    row.append(node('small',label),node('strong',value));
+    info.append(row);
+  }
   function button(label,fn){const b=node('button',label);actions.append(b);b.onclick=async()=>{if(working)return;working=true;status.textContent='Waiting…';try{await fn();}catch(e){status.textContent=e.code===4001||e.code==='ACTION_REJECTED'?'Wallet request canceled.':String(e.shortMessage||e.message||e).slice(0,200);}finally{working=false;}};return b;}
   async function receipt(tx){sessionStorage.setItem('pulse:lastTx',tx.hash);const a=node('a','Pending transaction ↗');a.href=explorer+'/tx/'+tx.hash;a.target='_blank';a.rel='noopener';status.replaceChildren(a);await tx.wait(1);refresh();}
   if(!signed()){
@@ -114,7 +125,9 @@ function panel(root,creator,side){
   (async()=>{
     const [exists,balance]=await Promise.all([ready(),reader.getBalance(account)]);
     if(current!==version||!root.isConnected)return;
-    info.textContent+=' · '+pretty(balance)+' tBNB';status.textContent='';
+    if(sheet)sheetStat('Wallet balance',pretty(balance)+' tBNB');
+    else info.textContent+=' · '+pretty(balance)+' tBNB';
+    status.textContent='';
     if(!exists){status.textContent='One-time shared market deployment required. Your wallet pays testnet gas.';button('Deploy testnet market',async()=>{const signer=await signerNow();if(await reader.getCode(factory)!==proxyCode)throw Error('Deployment proxy mismatch.');if(await ready()){refresh();return;}await receipt(await signer.sendTransaction({to:factory,data:concat([salt,market.bytecode]),chainId:97}));});return;}
     let key=token||account;
     if(!await marketRead.listed(key)){
@@ -124,7 +137,16 @@ function panel(root,creator,side){
     if(!token&&creator.id==='me'){window.dispatchEvent(new CustomEvent('pulse-creator-linked',{detail:account}));return;}
     const owned=await marketRead.balanceOf(account,key),unit=await marketRead.quote(key,1,true);
     if(current!==version||!root.isConnected)return;
-    info.textContent+=' · '+owned+' $'+creator.coin;actions.append(node('p','Next coin · '+pretty(unit)+' tBNB'));
+    if(sheet){
+      sheetStat('Your coins',owned+' $'+creator.coin);
+      const price=node('div','');
+      price.className='creatorUnitPrice';
+      price.append(node('strong',pretty(unit)),node('small','tBNB per coin'));
+      chart.before(price);
+    }else{
+      info.textContent+=' · '+owned+' $'+creator.coin;
+      actions.append(node('p','Next coin · '+pretty(unit)+' tBNB'));
+    }
     const qty=node('input','');Object.assign(qty,{type:'number',min:'1',max:'1000000',step:'1',value:'1'});const label=node('label','Creator coins');label.append(qty);actions.append(label);
     for(const buy of (side?[side==='buy']:[true,false]))button(buy?'Buy':'Sell',async()=>{
       if(!qty.reportValidity()||!qty.value)return;const n=BigInt(qty.value);if(!buy&&n>owned)throw Error('Insufficient creator coins.');

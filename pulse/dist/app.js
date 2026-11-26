@@ -433,7 +433,7 @@ function momentMarketChart(position,view){
   const points=values.map((value,i)=>[values.length===1?160:8+i*304/(values.length-1),max===min?60:y(value)]);
   const mark=history?points.at(-1):[8+304*position.sold/momentCurveCap,y(momentPrice(position.sold))];
   const dots=points.map(([x,y],index)=>history?'<circle cx="'+x+'" cy="'+y+'" r="3" class="'+((position.fills[index].side==='sell')?'sold':'bought')+'"/>':'').join('');
-  return '<div class="momentPlot"><svg viewBox="0 0 320 120" role="img" aria-label="'+(history?'Confirmed demo fill prices':'Bonding curve with current price marked')+'">'+
+  return '<div class="momentPlot"><svg viewBox="0 0 320 120" preserveAspectRatio="none" role="img" aria-label="'+(history?'Confirmed demo fill prices':'Bonding curve with current price marked')+'">'+
     '<path class="plotGrid" d="M8 15H312 M8 60H312 M8 105H312"/>'+
     '<path class="plotGuide" d="M8 '+mark[1]+'H312"/>'+
     '<polyline class="plotLine" points="'+points.map(point=>point.join(',')).join(' ')+'"/>'+dots+
@@ -471,7 +471,7 @@ function openMomentTrade(reel,view='curve'){
     momentFillList(fills)+
     '<div class="momentTradeFooter">'+(complete?'<p>This coin has completed its demo curve.</p>':
       '<form id="momentOrder"><label>Quantity <input name="quantity" type="number" min="1" max="1000000" step="1" value="100000" required></label>'+
-      '<div class="momentOrderActions"><button class="tradeSell" type="submit" value="sell">Sell</button><button class="tradeBuy" type="submit" value="buy">Buy</button></div></form>'+
+      '<div class="momentOrderActions"><button class="tradeBuy" type="submit" value="buy">Buy</button><button class="tradeSell" type="submit" value="sell">Sell</button></div></form>'+
       '<div class="momentOrderPreview" hidden></div>')+'<p class="momentTradeStatus" role="status"></p></div></section>');
   const chartButtons=$('#momentTicket').querySelectorAll('[data-chart]');
   for(const button of chartButtons)button.onclick=()=>{

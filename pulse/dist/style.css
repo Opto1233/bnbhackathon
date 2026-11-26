@@ -170,15 +170,15 @@ dialog[open]:has(#momentTicket){background:#151815;border-color:#424b38}
 .momentMarketHeader strong{overflow-wrap:anywhere}
 .momentLauncherAvatar,.momentAssetArt{display:grid;place-items:center;flex:none;color:#d6fa44;background:#293721 center/cover;font-weight:750}
 .momentLauncherAvatar{width:32px;height:32px;border-radius:50%}
-.momentAsset{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;padding:12px 0 6px}
+.momentAsset{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:8px;padding:12px 0 6px}
 .momentAssetArt{width:42px;height:42px;border-radius:11px}
 .momentAssetMeta{min-width:0}
 .momentAssetMeta h2{font-size:clamp(17px,4vw,23px);margin:0;line-height:1.2;overflow-wrap:anywhere}
 .momentAssetMeta button{text-align:left;overflow-wrap:anywhere}
-.momentAssetPrice{text-align:right}
-.momentAssetPrice strong{font-size:clamp(14px,4vw,20px);color:#e7f6bb;font-variant-numeric:tabular-nums}
+.momentAssetPrice{grid-column:1/-1;display:flex;align-items:baseline;flex-wrap:wrap;gap:8px;margin:4px 0}
+.momentAssetPrice strong,.creatorUnitPrice strong{font-size:clamp(28px,7vw,38px);line-height:1.1;letter-spacing:-.04em;color:#fff;font-variant-numeric:tabular-nums}
 .momentAssetPrice small,.momentChartHeading small,.momentPlotScale,.momentPlotAxis,.momentTradeStats small{display:block;color:#b8c1ae;font-size:11px}
-.momentChart{margin:6px 0 12px;border:1px solid #384133;border-radius:12px;padding:8px;background:#101410}
+.momentChart{margin:6px 0 12px;padding:0}
 .momentChartHeading,.momentPlotAxis{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .momentChartOptions{display:flex;gap:4px}
 .momentChartOptions button{border:0;padding:5px 8px;background:transparent;color:#b8c1ae;font-size:12px}
@@ -193,11 +193,10 @@ dialog[open]:has(#momentTicket){background:#151815;border-color:#424b38}
 .plotLine{stroke:#d6fa44;stroke-width:2;stroke-linecap:round}
 .plotMarker{fill:#d6fa44;stroke:#151815;stroke-width:2}
 .momentChartEmpty{margin:0;min-height:100px;display:grid;place-items:center;color:#b8c1ae;font-size:13px;text-align:center}
-.momentPosition{padding:10px 12px;border:1px solid #414b35;border-radius:12px;background:#1d231b}
-.momentTradeStats{display:flex;justify-content:space-between;gap:10px;margin-bottom:9px}
-.momentTradeStats div+div{text-align:right}
-.momentTradeStats strong{display:block;font-size:17px;overflow-wrap:anywhere}
-.momentTradeProgress{display:block;color:#bfc9b7;font-size:12px}
+.momentPosition{border-top:1px solid #353c30}
+.momentTradeStats div,.creatorStat{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #353c30}
+.momentTradeStats strong{display:block;font-size:14px;overflow-wrap:anywhere}
+.momentTradeProgress{display:block;padding:8px 0;color:#bfc9b7;font-size:12px}
 .momentTradeProgress strong{float:right}
 .momentTradeProgress progress{display:block;width:100%;height:6px;margin-top:5px;accent-color:#d6fa44}
 .momentFillList{margin-top:8px;font-size:13px}
@@ -216,3 +215,10 @@ dialog[open]:has(#momentTicket){background:#151815;border-color:#424b38}
 .momentOrderPreview p,.momentTradeStatus{margin:0}
 .momentTradeStatus:not(:empty){margin-top:10px;color:#e2efbe}
 .momentDetailActions{margin-top:10px}
+
+.creatorUnitPrice{display:flex;align-items:baseline;flex-wrap:wrap;gap:8px;margin:12px 0}
+#reelTicket.chainPanel{background:transparent;border:0;padding:0}
+#reelTicket .priceHistory{padding:0;background:transparent;border:0}
+#reelTicket .creatorActions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}
+#reelTicket .creatorActions>*{grid-column:1/-1;margin:0}
+#reelTicket .creatorActions :is(.tradeBuy,.tradeSell){grid-column:auto;min-height:44px}
