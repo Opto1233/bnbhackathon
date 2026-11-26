@@ -345,6 +345,12 @@ function marketRow({name,detail,art,key,action,stats,creatorId,age,views}){
     '<div class="marketActions">'+action+'<button class="star" data-act="watch:'+esc(key)+'" aria-pressed="'+!!saved+
     '" aria-label="Watchlist: '+esc(name)+'">'+(saved?'★':'☆')+'</button></div></article>';
 }
+function momentCreatedAt(coin){
+  return coin.createdAt??(coin.offset==null?null:demoStartedAt+coin.offset*1000);
+}
+function momentMarketCap(position){
+  return momentBNB(momentPrice(position.sold)*BigInt(position.sold));
+}
 function momentMarket(){
   const moments=s.clips.flatMap(reel=>momentsFor(reel.id).map(coin=>({reel,coin,id:coin.id||reel.id})))
     .filter(({id})=>marketGroup!=='saved'||s.watchlist?.includes('moment-'+id));
@@ -356,8 +362,8 @@ function momentMarket(){
       return marketRow({
         name:coin.name,detail:esc(reel.title)+' · '+momentTime(coin.time)+' · '+esc(coin.launcher||'You'),
         art:image(reel),key:'moment-'+id,views:last(reel.views),
-        age:coin.createdAt||(coin.offset?demoStartedAt+coin.offset*1000:null),action:btn('Trade',momentAction('tradeMoment',reel,coin),'marketTrade'),
-        stats:marketStats({marketCap:momentBNB(momentPrice(position.sold)*BigInt(position.sold)),
+        age:momentCreatedAt(coin),action:btn('Trade',momentAction('tradeMoment',reel,coin),'marketTrade'),
+        stats:marketStats({marketCap:momentMarketCap(position),
           holders:position.owned>0?1:0,top10:position.owned>0?'100%':null,
           fills:position.fills||[],format:momentBNB})
       });
@@ -732,16 +738,66 @@ function momentCrop(video,canvas,initial,form){
   }
   return {crop,redraw};
 }
+function momentMedia(reel){
+  return reel.owner==='me'?urls[reel.id]:'media/'+reel.id+'.mp4';
+}
+function drawMomentPickerFrames(sheet,media,coins){
+  if(!media)return;
+  const video=document.createElement('video'), dialog=sheet.closest('dialog');
+  video.hidden=true;
+  video.muted=true;
+  video.playsInline=true;
+  video.preload='auto';
+  const frames=[...sheet.querySelectorAll('.momentPickerFrame')];
+  let index=0;
+  function stop(){
+    dialog.removeEventListener('close',onClose);
+    video.removeAttribute('src');
+    video.load();
+    video.remove();
+  }
+  function drawNext(){
+    while(index<frames.length&&sheet.isConnected&&dialog.open){
+      const coin=coins[index], canvas=frames[index];
+      const time=Math.min(coin.time,Math.max(0,video.duration-.01));
+      if(!Number.isFinite(time))break;
+      if(Math.abs(video.currentTime-time)>=.001){
+        video.currentTime=time;
+        return;
+      }
+      if(video.seeking||video.readyState<2)return;
+      momentCrop(video,canvas,coin.crop).redraw();
+      index++;
+    }
+    stop();
+  }
+  function onClose(){if(!dialog.open||!sheet.isConnected)stop();}
+  video.addEventListener('loadeddata',drawNext);
+  video.addEventListener('seeked',drawNext);
+  video.addEventListener('error',stop,{once:true});
+  dialog.addEventListener('close',onClose);
+  sheet.append(video);
+  video.src=media;
+}
 function openMomentPicker(reel){
+  const coins=momentsFor(reel.id), ledger=momentLedger();
+  const art=image(reel);
   modal('<section class="momentSheet"><h2>Moment Coins</h2><p class="momentSource">'+esc(reel.title)+'</p>'+
-    '<ul class="momentPicker">'+momentsFor(reel.id).map(coin=>'<li>'+
-      btn(esc(coin.name)+' · '+momentTime(coin.time),momentAction('momentDetail',reel,coin),'subtle')+
-      btn('Trade',momentAction('tradeMoment',reel,coin),'marketTrade')+'</li>').join('')+'</ul>'+
-    btn('Create another Moment Coin','newMoment:'+esc(reel.id),'primary')+'</section>');
+    '<ul class="momentPicker">'+coins.map(coin=>{
+      const position=momentPosition(ledger,coin.id||reel.id);
+      return '<li><button type="button" class="momentPickerCoin" data-act="'+momentAction('momentDetail',reel,coin)+'">'+
+        '<span class="assetArt" style="'+art+'" aria-hidden="true">'+(art?'':esc(coin.name[0]))+
+        '<canvas class="momentPickerFrame" width="112" height="112"></canvas></span>'+
+        '<span class="momentPickerName"><strong>'+esc(coin.name)+'</strong><small>Frame '+momentTime(coin.time)+'</small></span></button>'+
+        '<dl class="momentPickerStats"><div><dt>Market cap</dt><dd>'+marketUsd(momentMarketCap(position))+'</dd></div>'+
+        '<div><dt>Age</dt><dd>'+esc(marketAge(momentCreatedAt(coin)))+'</dd></div></dl>'+
+        btn('Trade',momentAction('tradeMoment',reel,coin),'marketTrade')+'</li>';
+    }).join('')+'</ul>'+btn('Create another Moment Coin','newMoment:'+esc(reel.id),'primary')+'</section>');
+  drawMomentPickerFrames($('#form .momentSheet'),momentMedia(reel),coins);
 }
 function openMoment(reel,source,existing=momentFor(reel?.id)){
   if(!reel)return;
-  const media=source?.getAttribute('src')||(reel.owner==='me'?urls[reel.id]:'media/'+reel.id+'.mp4');
+  const media=source?.getAttribute('src')||momentMedia(reel);
   if(!media)return toast('This clip is unavailable.');
   const hasCrop=!existing||Boolean(existing.crop);
   const resume=source&&!source.paused;
