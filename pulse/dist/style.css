@@ -153,3 +153,13 @@ dialog[open]:has(#reelTicket,.commentsSheet){animation:pulseSheetUp .24s cubic-b
 .momentMarketRow small{display:block;color:#bbc4af}
 .momentMarketTime{color:#d6fa44;font-size:13px;font-variant-numeric:tabular-nums}
 .reelsPage .byline .momentPill{color:#eddfab;border-color:#a68a587f;background:#332a1fdd}
+
+.momentPreview[hidden]{display:none}
+.momentCrop{display:block;width:min(100%,33dvh,260px);height:auto;aspect-ratio:1;margin-inline:auto;background:#0d0f0b;border:1px solid #546044;border-radius:10px}
+.momentCrop[tabindex]{touch-action:none;cursor:grab}
+.momentCrop[tabindex]:active{cursor:grabbing}
+.momentCrop:focus-visible{outline:2px solid #d6fa44;outline-offset:2px}
+.momentCropControls{display:flex;align-items:center;gap:12px}
+.momentCropControls .momentZoom{flex:1;min-width:0;margin:0}
+.momentCropReset{flex:none;min-height:40px}
+#momentCropHelp{margin:2px 0 8px;color:#c2c6b8;font-size:12px}

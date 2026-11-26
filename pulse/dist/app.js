@@ -434,28 +434,85 @@ async function shareReel(reel){
 function momentTime(seconds){
   return Math.floor(seconds/60)+':'+(seconds%60).toFixed(2).padStart(5,'0');
 }
+function momentCrop(video,canvas,initial,form){
+  const crop={...(initial||{zoom:1,x:.5,y:.5})};
+  if(!canvas)return null;
+  const ctx=canvas.getContext('2d');
+  const clamp=(value,min,max)=>Math.min(max,Math.max(min,value));
+  const side=()=>Math.min(video.videoWidth,video.videoHeight)/crop.zoom;
+  function redraw(){
+    if(video.readyState<2||video.seeking||!side())return;
+    const length=side(), width=video.videoWidth, height=video.videoHeight;
+    crop.x=clamp(crop.x,length/(2*width),1-length/(2*width));
+    crop.y=clamp(crop.y,length/(2*height),1-length/(2*height));
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(video,crop.x*width-length/2,crop.y*height-length/2,length,length,0,0,canvas.width,canvas.height);
+  }
+  function pan(px,py){
+    if(!side())return;
+    const scale=side()/canvas.getBoundingClientRect().width;
+    crop.x-=px*scale/video.videoWidth;
+    crop.y-=py*scale/video.videoHeight;
+    redraw();
+  }
+  if(form){
+    const zoom=form.elements.zoom, value=form.querySelector('.momentZoom output');
+    zoom.oninput=()=>{
+      crop.zoom=Number(zoom.value);value.textContent=crop.zoom.toFixed(2)+'×';
+      redraw();
+    };
+    form.querySelector('.momentCropReset').onclick=()=>{
+      Object.assign(crop,{zoom:1,x:.5,y:.5});zoom.value='1';zoom.oninput();
+    };
+    let drag;
+    canvas.addEventListener('pointerdown',event=>{
+      if(!event.isPrimary||event.button!==0)return;
+      drag={id:event.pointerId,x:event.clientX,y:event.clientY};
+      canvas.setPointerCapture(event.pointerId);
+    });
+    canvas.addEventListener('pointermove',event=>{
+      if(drag?.id!==event.pointerId)return;
+      pan(event.clientX-drag.x,event.clientY-drag.y);
+      drag.x=event.clientX;drag.y=event.clientY;
+    });
+    canvas.addEventListener('lostpointercapture',()=>{drag=null;});
+    canvas.addEventListener('keydown',event=>{
+      const offsets={ArrowLeft:[-12,0],ArrowRight:[12,0],ArrowUp:[0,-12],ArrowDown:[0,12]};
+      if(!offsets[event.key])return;
+      event.preventDefault();pan(...offsets[event.key]);
+    });
+  }
+  return {crop,redraw};
+}
 function openMoment(reel,source){
   if(!reel)return;
   const media=source?.getAttribute('src')||(reel.owner==='me'?urls[reel.id]:'media/'+reel.id+'.mp4');
   if(!media)return toast('This clip is unavailable.');
   const existing=momentFor(reel.id);
+  const hasCrop=!existing||Boolean(existing.crop);
   const resume=source&&!source.paused;
   source?.pause();
   const start=existing?.time??source?.currentTime??0;
   modal('<section class="momentSheet"><h2>'+(existing?'Moment Coin':'Create Moment Coin')+'</h2>'+
     '<p class="momentSource">'+esc(reel.title)+' · '+esc(chan(reel.owner).name)+'</p>'+
-    '<video class="momentPreview" muted playsinline preload="auto" src="'+esc(media)+'" aria-label="Selected frame"></video>'+
+    '<video class="momentPreview" muted playsinline preload="auto" src="'+esc(media)+'"'+(hasCrop?' hidden':' aria-label="Selected frame"')+'></video>'+
+    (hasCrop?'<canvas class="momentCrop" width="512" height="512" '+(existing?'role="img" aria-label="Cropped Moment Coin frame"':'tabindex="0" aria-label="Crop preview" aria-describedby="momentCropHelp"')+'></canvas>':'')+
     (existing?'<h3>'+esc(existing.name)+'</h3><p>'+esc(existing.description)+'</p><p>Frame '+momentTime(existing.time)+' · Created by '+esc(existing.launcher||'You')+'</p><small>Demo Moment Coin</small>':
-      '<form id="momentLaunch"><label class="momentTimeline">Choose a frame <output></output><input type="range" min="0" step=".01" value="0" disabled></label>'+
+      '<form id="momentLaunch"><label class="momentTimeline">Choose a frame <output></output><input name="frame" type="range" min="0" step=".01" value="0" disabled></label>'+
+      '<div class="momentCropControls"><label class="momentZoom">Zoom <output>1.00×</output><input name="zoom" type="range" min="1" max="4" step=".05" value="1"></label><button type="button" class="subtle momentCropReset">Reset crop</button></div>'+
+      '<p id="momentCropHelp">Drag the frame or use arrow keys to position it.</p>'+
       '<label>Coin name<input name="name" maxlength="60" required></label>'+
       '<label>Description<textarea name="description" maxlength="220" rows="2" required></textarea></label>'+
       '<button type="submit" class="primary" disabled>Create demo coin</button><small>Saved on this device</small></form>')+
     '<p class="momentStatus" role="status">Loading clip…</p></section>');
   const dialog=$('dialog'), preview=$('.momentPreview'), form=$('#momentLaunch'), status=$('.momentStatus');
-  const track=form?.querySelector('input[type=range]'), submit=form?.querySelector('button');
+  const track=form?.elements.frame, submit=form?.querySelector('button[type=submit]');
+  const editor=momentCrop(preview,$('.momentCrop'),existing?.crop,form);
   function seek(){
     const time=track?Number(track.value):Math.min(start,preview.duration);
     if(track)form.querySelector('output').textContent=momentTime(time)+' / '+momentTime(preview.duration);
+    if(Math.abs(preview.currentTime-time)<.001&&!preview.seeking){ready();return;}
+    if(submit)submit.disabled=true;
     preview.currentTime=time;
   }
   preview.addEventListener('loadedmetadata',()=>{
@@ -470,6 +527,7 @@ function openMoment(reel,source){
   });
   const ready=()=>{
     if(preview.readyState<2||preview.seeking||preview.error)return;
+    editor?.redraw();
     status.textContent='';if(submit)submit.disabled=false;
   };
   preview.addEventListener('loadeddata',ready);
@@ -487,7 +545,7 @@ function openMoment(reel,source){
     if(momentFor(reel.id)){
       status.textContent='This reel already has a Moment Coin. Reopen the clip editor to see it.';return;
     }
-    s.moments[reel.id]={name,description,time:Number(track.value),ownerId:reel.owner,clipId:reel.id,launcher:self()?.name||'You'};
+    s.moments[reel.id]={name,description,time:Number(track.value),crop:editor.crop,ownerId:reel.owner,clipId:reel.id,launcher:self()?.name||'You'};
     try{save();}catch{delete s.moments[reel.id];status.textContent='Could not save this Moment Coin.';return;}
     source?.closest('.reel')?.querySelector('.byline')?.insertAdjacentHTML('beforeend',momentBadge(reel));
     dialog.close();toast('Created '+name+' · Demo Moment Coin');
