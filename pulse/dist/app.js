@@ -62,6 +62,15 @@ function reelThumb(reel, className=''){
     ? '<video src="'+esc(reel.media || urls[reel.id])+'" muted playsinline preload="metadata" aria-hidden="true"></video>' : '';
   return '<button type="button" class="reelThumb '+className+'" data-go="Clips/'+esc(reel.id)+'" aria-label="Play '+esc(reel.title)+'" style="'+image(reel)+'">'+preview+'<span>▷ '+fmt(last(reel.views))+'</span></button>';
 }
+function profileAvatar(channel,className){
+  const image=channel?.avatar?'<img class="profileAvatarImage" src="'+esc(channel.avatar)+'" alt="">':'';
+  return '<span class="'+className+'" aria-hidden="true">'+esc(channel?.name[0]?.toUpperCase()||'')+image+'</span>';
+}
+function exploreProfileLink(channel,title,subtitle,route){
+  return '<div class="exploreRow">'+link(profileAvatar(channel,'exploreAvatar')+
+    '<span class="exploreProfileName"><strong>'+esc(title)+'</strong>'+
+    (subtitle?'<small>'+esc(subtitle)+'</small>':'')+'</span>',route,'exploreTitle exploreProfileLink')+'</div>';
+}
 let exploreTab='all';
 function exploreResults(){
   const q=query.trim().toLowerCase(), matches=(...values)=>values.some(value=>String(value||'').toLowerCase().includes(q));
@@ -73,9 +82,9 @@ function exploreResults(){
       const owner=chan(reel.owner);
       return '<article class="exploreRow">'+link('<strong>'+esc(reel.title)+'</strong><small>'+esc(owner?.name||'')+' · '+fmt(last(reel.views))+' views</small>','Clips/'+reel.id,'exploreTitle')+reelThumb(reel)+'</article>';
     })],
-    ['channels','Channels',channels.map(c=>'<div class="exploreRow">'+link('<strong>'+esc(c.name)+'</strong><small>'+fmt(last(c.followers))+' followers</small>','Profile/'+c.id,'exploreTitle')+'</div>')],
-    ['traders','Traders',channels.filter(c=>s.closed.some(trade=>trade.owner===c.id)||c.id===myId()&&Object.keys(s.hold).length).map(c=>'<div class="exploreRow">'+link(esc(c.name),'Profile/'+c.id,'exploreTitle')+'</div>')],
-    ['coins','Creator coins',channels.filter(c=>c.coin).map(c=>'<div class="exploreRow">'+link('<strong>$'+esc(c.coin)+'</strong><small>'+esc(c.name)+'</small>','Trading/'+c.id,'exploreTitle')+'</div>')]
+    ['channels','Channels',channels.map(c=>exploreProfileLink(c,c.name,fmt(last(c.followers))+' followers','Profile/'+c.id))],
+    ['traders','Traders',channels.filter(c=>s.closed.some(trade=>trade.owner===c.id)||c.id===myId()&&Object.keys(s.hold).length).map(c=>exploreProfileLink(c,c.name,'','Profile/'+c.id))],
+    ['coins','Creator coins',channels.filter(c=>c.coin).map(c=>exploreProfileLink(c,'$'+c.coin,c.name,'Trading/'+c.id))]
   ];
   const visible=groups.filter(([id,,rows])=>rows.length&&(exploreTab==='all'||exploreTab===id));
   const hashtags=!q&&exploreTab==='all'?'<section class="exploreHashtags"><h2>Trending hashtags</h2><div>'+
@@ -281,12 +290,104 @@ function feed(id){
     const caption=seeded?'<div class="memeCaption"><strong>'+esc(c.title)+'</strong><strong>'+esc(punchlines[Number(c.id)-1])+'</strong></div>':'';
     const hashtags=reelHashtags(c).map(tag=>btn(esc(tag),'hashtag:'+esc(tag),'reelHashtag')).join('');
     const coin=ch.coin?link('$'+esc(ch.coin),'Trading/'+ch.id,'coinPill'):'';
-    return '<article class="reel" data-id="'+c.id+'"'+backdrop+'><video playsinline muted loop controls '+media+'></video>'+caption+
+    return '<article class="reel" data-id="'+c.id+'"'+backdrop+'><video playsinline muted controls '+media+'></video>'+caption+
       '<button type="button" class="momentGesture" aria-label="Hold to create Moment Coin" title="Hold to create Moment Coin"></button>'+
       '<div class="controls"><div class="byline">'+link(esc(ch.name),'Profile/'+ch.id)+coin+momentBadge(c)+'</div><h3>'+esc(c.title)+'</h3>'+(demoReel(c.id)?'<span class="demoLabel">Demo activity</span>':'')+(hashtags?'<div class="reelHashtags">'+hashtags+'</div>':'')+'</div>'+reelActions(c)+'</article>';
   }).join('')+'</div>';
 }
-function observe(){observer?.disconnect();const root=$('.feed');if(!root)return;observer=new IntersectionObserver(entries=>entries.forEach(e=>{let v=e.target.querySelector('video');if(e.isIntersecting){v.play().catch(()=>{});let c=clip(e.target.dataset.id);c.views.push([Date.now(),last(c.views)+1]);save();}else v.pause();}),{root,threshold:.65});root.querySelectorAll('article').forEach(el=>observer.observe(el));}
+const reelVisibility=.65;
+let activeReelWatch, feedRoute;
+function applySharedViews(views,count){
+  if(count==null)return false;
+  const total=Number(count);
+  if(!Number.isSafeInteger(total)||total<=last(views))return false;
+  views.push([Date.now(),total]);
+  return true;
+}
+function recordReelView(reel){
+  if(!reel||reel.owner===myId())return;
+  if(reel.shared){
+    shared.recordView(reel.id,crypto.randomUUID()).then(count=>{
+      const current=clip(reel.id);
+      if(current)applySharedViews(current.views,count);
+    }).catch(error=>console.warn('Shared view could not be recorded:',error.message));
+    return;
+  }
+  reel.views.push([Date.now(),last(reel.views)+1]);
+  save();
+}
+function observe(previous){
+  observer?.disconnect();
+  activeReelWatch=null;
+  const root=$('.feed');
+  if(!root)return;
+  const watches=new Map();
+  for(const article of root.querySelectorAll('.reel')){
+    const video=article.querySelector('video'), id=article.dataset.id;
+    const restored=previous?.id===id?previous:null;
+    const watch={id,video,visible:false,counted:restored?.counted||false,position:0};
+    watches.set(article,watch);
+    if(restored){
+      root.scrollTop=article.offsetTop-root.firstElementChild.offsetTop;
+      if(restored.position>0)video.addEventListener('loadedmetadata',()=>{
+        if(restored.position<video.duration)video.currentTime=restored.position;
+      },{once:true});
+    }
+    function countPlayback(){
+      if(!video.isConnected||!watch.visible||document.hidden||video.paused||watch.counted)return;
+      watch.counted=true;
+      recordReelView(clip(id));
+    }
+    watch.play=()=>video.play().then(countPlayback).catch(()=>{});
+    video.addEventListener('playing',countPlayback);
+    video.addEventListener('timeupdate',()=>{
+      if(video.seeking)return;
+      watch.position=video.currentTime;
+      if(watch.restarted&&watch.position>0){watch.restarted=false;countPlayback();}
+    });
+    video.addEventListener('seeking',()=>{
+      if(watch.visible&&watch.counted&&watch.position>.05&&video.currentTime<=.01){
+        watch.counted=false;
+        watch.restarted=true;
+      }
+    });
+    video.addEventListener('ended',()=>{
+      watch.counted=false;
+      watch.position=0;
+      if(watch.visible&&!document.hidden)watch.play();
+    });
+  }
+  observer=new IntersectionObserver(entries=>{
+    if(!root.isConnected)return;
+    for(const entry of entries){
+      const watch=watches.get(entry.target);
+      const visible=entry.intersectionRatio>=reelVisibility;
+      if(watch.visible===visible)continue;
+      watch.visible=visible;
+      if(visible){
+        activeReelWatch=watch;
+        watch.resumeOnShow=document.hidden;
+        if(!document.hidden)watch.play();
+      }else{
+        if(activeReelWatch===watch)activeReelWatch=null;
+        watch.video.pause();
+        watch.counted=false;
+      }
+    }
+  },{root,threshold:reelVisibility});
+  for(const article of watches.keys())observer.observe(article);
+}
+document.addEventListener('visibilitychange',()=>{
+  const watch=activeReelWatch;
+  if(!watch)return;
+  if(document.hidden){
+    watch.resumeOnShow=!watch.video.paused;
+    watch.video.pause();
+  }else if(watch.resumeOnShow&&!$('dialog').open){
+    watch.resumeOnShow=false;
+    watch.play();
+  }
+});
 let marketGroup='creators';
 const marketDemoUsdRate=600;
 const marketUsdFormatter=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:6});
@@ -459,6 +560,7 @@ function ranks(){
         '<strong class="'+(profitability&&value!==0?(value>0?'positive':'rankLoss'):'')+'">'+score+'</strong>'+reelThumb(reel)+'</li>';
     }).join('')+'</ol>':'<p class="emptyView">No rankings for this period.</p>')+'</section>';
 }
+function followedProfiles(){return s.profileFollows?.[myId()]||[];}
 function profile(id=myId()){
   if(id==='me')id=myId();
   const channel=chan(id), mine=id===myId();
@@ -468,11 +570,18 @@ function profile(id=myId()){
   const name=channel?.name||'My profile', handle=channel?.name.toLowerCase().replaceAll(/[^\p{L}\p{N}]+/gu,'_').replace(/^_|_$/g,'');
   const likes=owned.reduce((total,reel)=>total+reelLikeCount(reel),0);
   const action=!channel?btn('Create channel','channel','primary'):channel.coin?link('Trade $'+esc(channel.coin),'Trading/'+channel.id,'primary'):mine?btn('Launch channel coin','launch','primary'):'';
-  const avatar=id!==myId()&&owned.length&&!owned[0].shared?' style="'+image(owned[0])+'"':'';
-  const stats=[['Following',channel?.following||0],['Followers',last(channel?.followers||[])],['Likes',likes]];
+  const following=followedProfiles();
+  const isFollowing=following.includes(id);
+  const localFollowers=Object.values(s.profileFollows||{}).filter(ids=>ids.includes(id)).length;
+  const stats=[['Following',(channel?.following||0)+(mine?following.length:0)],
+    ['Followers',last(channel?.followers||[])+localFollowers],['Likes',likes]];
+  const social=mine?'':'<div class="profileSocialActions">'+
+    '<button type="button" class="profileFollow'+(isFollowing?'':' primary')+'" data-act="followProfile:'+esc(id)+
+    '" aria-label="Follow '+esc(name)+'" aria-pressed="'+isFollowing+'">'+(isFollowing?'Following':'Follow')+'</button>'+
+    link('Message','Inbox/'+id,'profileMessage')+'</div>';
   return '<section class="creatorProfile"><div class="creatorIntro"><div class="creatorDetails"><h1>'+esc(name)+'</h1>'+
-    (handle?'<p>@'+esc(handle)+'</p>':'')+'<dl class="creatorStats">'+stats.map(([label,count])=>'<div><dt>'+label+'</dt><dd>'+fmt(count)+'</dd></div>').join('')+'</dl></div><div class="creatorAvatar" aria-hidden="true"'+avatar+'>'+(avatar?'':esc(name[0]))+'</div></div>'+
-    '<div class="creatorActions">'+action+(mine&&channel?btn('Create video','create',''):'')+'</div>'+
+    (handle?'<p>@'+esc(handle)+'</p>':'')+'<dl class="creatorStats">'+stats.map(([label,count])=>'<div><dt>'+label+'</dt><dd>'+fmt(count)+'</dd></div>').join('')+'</dl></div>'+profileAvatar(channel||{name},'creatorAvatar')+'</div>'+
+    social+(action||mine&&channel?'<div class="creatorActions">'+action+(mine&&channel?btn('Create video','create','')+btn('Edit profile photo','editPhoto',''):'')+'</div>':'')+
     (mine?'<section class="panel portfolio" id="holdings"></section>':'')+
     (mine?viewTabs('Profile videos',[[0,'Posts'],[1,'Reposts'],[2,'Liked'],[3,'Saved']],tab,'tab'):'<h2 class="profilePosts">Posts</h2>')+
     (items.length?'<div class="creatorGrid">'+items.slice().reverse().map(reel=>reelThumb(reel)).join('')+'</div>':'<p class="emptyView">No videos here yet.</p>')+'</section>';
@@ -502,7 +611,10 @@ function render(){
     const symbol=route==='Trading'?tradeSymbol:'<svg aria-hidden="true" viewBox="0 0 24 24"><path d="'+icon+'"/></svg>';
     return '<a href="#'+route+'" class="dockItem '+(route==='Clips'?'center ':'')+(active?'active':'')+'" '+(active?'aria-current="page"':'')+'><span class="dockIcon">'+symbol+'</span>'+label+'</a>';
   }).join('');
-  $('main').innerHTML=({Login:loginScreen,Trending:trending,Search:search,Clips:feed,Trading:trade,Inbox:inbox,Profile:profile})[p](id);observe();paintWallet();paintMarketRows();
+  const previous=p==='Clips'&&feedRoute===location.hash?activeReelWatch:null;
+  activeReelWatch?.video.pause();
+  feedRoute=p==='Clips'?location.hash:null;
+  $('main').innerHTML=({Login:loginScreen,Trending:trending,Search:search,Clips:feed,Trading:trade,Inbox:inbox,Profile:profile})[p](id);observe(previous);paintWallet();paintMarketRows();
   if(p==='Login')window.pulseWallet.loginPage($('#walletLogin'),()=>go(['portfolio','profile'].includes(id)?'Profile':id&&chan(id)?.coin?'Trading/'+id:'Clips'));
 }
 function modal(html){$('#form').innerHTML=html;if(!$('dialog').open)$('dialog').showModal();}
@@ -917,6 +1029,19 @@ function action(str,el){let [k,v,id]=str.split(':');
 if(shared && ['channel','create','launch'].includes(k) && !window.pulseWallet.signed()){
   toast('Sign in with your wallet to publish.');return go('Login/profile');
 }
+if(k==='editPhoto'){
+  if(!self())return;
+  return modal('<h2>Edit profile photo</h2><form id="profilePhoto">'+
+    '<label>Choose a photo<input type="file" name="photo" accept="image/jpeg,image/png,image/webp" required></label>'+
+    '<button class="primary">Save photo</button></form>');
+}
+if(k==='followProfile'){
+  if(v===myId()||!chan(v))return;
+  const following=followedProfiles();
+  (s.profileFollows??={})[myId()]=following.includes(v)?following.filter(id=>id!==v):[...following,v];
+  save();render();$('.profileFollow')?.focus();
+  return;
+}
 if(k==='hashtag'){query=v;exploreTab='reels';return go('Search');}
 if(k==='comments'||k==='reply')return showComments(clip(v),id);
 if(k==='commentLike'){
@@ -968,6 +1093,9 @@ document.addEventListener('click',e=>{
     return;
   }
   let el=e.target.closest('[data-go],[data-act]');if(!el)return;if(el.dataset.go)go(el.dataset.go);else action(el.dataset.act,el);});
+document.addEventListener('load',event=>{
+  if(event.target instanceof HTMLImageElement&&event.target.matches('.profileAvatarImage'))event.target.classList.add('avatarReady');
+},true);
 document.addEventListener('change',e=>{if(e.target.id==='token')go('Trading/'+e.target.value);});
 document.addEventListener('input',e=>{if(e.target.id==='search'){query=e.target.value;$('#exploreResults').innerHTML=exploreResults();}});
 const dbReady=!shared && new Promise((resolve,reject)=>{let req=indexedDB.open('pulse-clips',1);req.onupgradeneeded=()=>req.result.createObjectStore('videos');req.onerror=()=>reject(req.error);req.onsuccess=()=>resolve(req.result);});
@@ -979,20 +1107,72 @@ async function refreshShared() {
   const {creators, videos} = await shared.feed();
   if(request !== sharedRead)return;
   const signature = JSON.stringify({
-    creators: creators.map(c=>[c.id,c.name,c.ticker]),
+    creators: creators.map(c=>[c.id,c.name,c.ticker,c.avatar_updated_at]),
     videos: videos.map(v=>[v.id,v.creator_id,v.title,v.created_at])
   });
-  if(signature===sharedSignature)return;
-  sharedSignature=signature;
   const known = new Map(s.clips.filter(c=>c.shared).map(c=>[c.id,c]));
+  if(signature===sharedSignature){
+    let viewsChanged=false;
+    for(const video of videos){
+      const current=known.get(video.id);
+      if(current&&applySharedViews(current.views,video.view_count))viewsChanged=true;
+    }
+    if(viewsChanged&&path()[0]!=='Clips'&&!$('dialog').open&&document.activeElement?.id!=='search')render();
+    return;
+  }
+  sharedSignature=signature;
   s.channels = [...s.channels.filter(c=>!c.shared), ...creators.map(c=>({
-    id:c.id, name:c.name, coin:c.ticker, walletId:c.wallet, shared:true, followers:[], following:0
+    id:c.id, name:c.name, coin:c.ticker, walletId:c.wallet, shared:true, avatar:shared.avatar(c), followers:[], following:0
   }))];
-  s.clips = [...videos.map(v=>({
-    id:v.id, owner:v.creator_id, title:v.title, shared:true, media:shared.media(v),
-    likes:0, views:known.get(v.id)?.views || [[Date.parse(v.created_at),0]]
-  })), ...s.clips.filter(c=>!c.shared)];
+  s.clips = [...videos.map(v=>{
+    const views=known.get(v.id)?.views||[[Date.now(),0]];
+    applySharedViews(views,v.view_count);
+    return {id:v.id, owner:v.creator_id, title:v.title, shared:true, media:shared.media(v), likes:0, views};
+  }), ...s.clips.filter(c=>!c.shared)];
   render();
+}
+
+async function prepareProfilePhoto(file){
+  if(!file||!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10*1024*1024)
+    throw Error('Choose a JPG, PNG, or WebP photo up to 10 MB.');
+  const url=URL.createObjectURL(file);
+  try{
+    const photo=new Image();
+    photo.src=url;
+    await photo.decode();
+    const side=Math.min(photo.naturalWidth,photo.naturalHeight);
+    const canvas=document.createElement('canvas');
+    canvas.width=canvas.height=256;
+    const context=canvas.getContext('2d');
+    context.fillStyle='#2a3022';
+    context.fillRect(0,0,256,256);
+    context.drawImage(photo,(photo.naturalWidth-side)/2,(photo.naturalHeight-side)/2,side,side,0,0,256,256);
+    return canvas;
+  }catch{throw Error('This photo could not be opened. Choose another image.');}
+  finally{URL.revokeObjectURL(url);}
+}
+async function saveProfilePhoto(form){
+  const channel=self(), button=form.querySelector('button');
+  if(!channel||button.disabled)return;
+  if(shared&&!window.pulseWallet.signed()){go('Login/profile');$('dialog').close();return;}
+  button.disabled=true;
+  try{
+    const canvas=await prepareProfilePhoto(form.elements.photo.files[0]);
+    if(shared){
+      const photo=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.88));
+      if(!photo)throw Error('This photo could not be saved.');
+      if(self()?.id!==channel.id)throw Error('Wallet changed. Sign in again.');
+      await shared.setAvatar(photo);
+      await refreshShared();
+    }else{
+      channel.avatar=canvas.toDataURL('image/jpeg',.88);
+      save();
+      render();
+    }
+    if(form.isConnected)$('dialog').close();
+    toast('Profile photo updated.');
+  }catch(error){toast(error.message||'Could not save your photo. Please retry.');}
+  finally{button.disabled=false;}
 }
 
 async function submitShared(form, data) {
@@ -1024,7 +1204,7 @@ async function submitShared(form, data) {
   }finally{button.disabled=false;}
 }
 
-document.addEventListener('submit',async e=>{let f=e.target;if(!f.id)return;e.preventDefault();let d=new FormData(f);if(shared && ['channel','launch','upload'].includes(f.id))return submitShared(f,d);if(['reelComment','reelReport','inboxMessage'].includes(f.id))return submitSocial(f,d);if(f.id==='channel'){let name=d.get('name').trim();if(!name)return toast('Enter a channel name.');if(!self())s.channels.push({id:'me',name,followers:[[Date.now(),0]],following:0});save();if(f.dataset.next==='create')return create();go('Profile');}
+document.addEventListener('submit',async e=>{let f=e.target;if(!f.id)return;e.preventDefault();let d=new FormData(f);if(f.id==='profilePhoto')return saveProfilePhoto(f);if(shared && ['channel','launch','upload'].includes(f.id))return submitShared(f,d);if(['reelComment','reelReport','inboxMessage'].includes(f.id))return submitSocial(f,d);if(f.id==='channel'){let name=d.get('name').trim();if(!name)return toast('Enter a channel name.');if(!self())s.channels.push({id:'me',name,followers:[[Date.now(),0]],following:0});save();if(f.dataset.next==='create')return create();go('Profile');}
 if(f.id==='launch'){let c=self(),symbol=d.get('symbol').toUpperCase();if(c.coin||s.channels.some(x=>x.coin===symbol))return toast('This symbol is already taken.');Object.assign(c,{coin:symbol,supply:1000000,prices:[[Date.now(),1]]});toast('Coin symbol saved. Open the market to launch.');}
 if(f.id==='upload'){let file=d.get('video'),title=d.get('title').trim();if(!title||!file.type.startsWith('video/'))return toast('Enter a title and choose a video.');f.querySelector('button').disabled=true;try{let db=await dbReady,id=crypto.randomUUID();await new Promise((ok,no)=>{let tx=db.transaction('videos','readwrite');tx.objectStore('videos').put(file,id);tx.oncomplete=ok;tx.onabort=no;});urls[id]=URL.createObjectURL(file);s.clips.push({id,owner:'me',title,likes:0,views:[[Date.now(),0]]});tab=0;go('Profile');toast('Video published.');}catch{f.querySelector('button').disabled=false;return toast('Unable to save this video. Try a smaller file.');}}
 save();$('dialog').close();render();});
