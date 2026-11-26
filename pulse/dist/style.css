@@ -12,3 +12,57 @@ button.tradeSell{background:#b82f46;border-color:#d74961}
 dialog[open]:has(#reelTicket){position:fixed;inset:0 max(8px,env(safe-area-inset-right)) 0 auto;margin:auto 0;box-sizing:border-box;width:min(390px,88vw);height:fit-content;max-height:calc(100dvh - 32px);overflow-y:auto;border:1px solid #4b4b50;box-shadow:-12px 8px 56px #0007;animation:ticketIn .18s ease-out}dialog:has(#reelTicket)::backdrop{background:#07080c70}@keyframes ticketIn{from{transform:translateX(24px);opacity:.5}to{transform:translateX(0);opacity:1}}@media(prefers-reduced-motion:reduce){dialog[open]:has(#reelTicket){animation:none}}
 /* The feed owns the viewport between the overlay header and the navigation dock. */
 .reelsPage{--feed-bottom:calc(65px + env(safe-area-inset-bottom));--stage:min(100vw, max(460px,62dvh));background:#09090b;overflow:hidden}.reelsPage header{position:fixed;z-index:3;top:0;left:50%;transform:translateX(-50%);width:var(--stage);height:64px;flex-wrap:nowrap;border:0;padding:10px 16px;gap:12px;background:linear-gradient(#08090cb3,transparent)}.reelsPage .brand{font-size:23px}.reelsPage .brand i{width:27px;height:27px;font-size:25px}.reelsPage .create,.reelsPage .accountLink{border:1px solid #ffffff45;background:#0d0e14aa;color:white;border-radius:18px;font-size:13px;padding:6px 10px}.reelsPage main:has(.feed){max-width:none;padding:0;margin:0}.reelsPage .feed{width:var(--stage);height:calc(100dvh - var(--feed-bottom));min-height:0;margin:auto;overscroll-behavior:contain;scrollbar-width:none}.reelsPage .reel{isolation:isolate;overflow:hidden;max-width:none;background:#171719}.reelsPage .reel::before{content:"";position:absolute;inset:-20px;z-index:-1;background:linear-gradient(#12101533,#14101899),var(--reel-poster,none) center/cover;filter:blur(22px)}.reelsPage .reel video{display:block;object-fit:contain;background:transparent}.reelsPage .memeCaption{inset:17% 7% auto}.reelsPage .reelRail{bottom:66px;right:10px;gap:6px;max-height:calc(100% - 145px)}.reelsPage .railAction:not(.tradeBuy):not(.tradeSell){background:transparent;border-color:transparent;color:white;text-shadow:0 1px 5px black}.reelsPage .railAction:not(.tradeBuy):not(.tradeSell) span{font-size:29px;filter:drop-shadow(0 1px 3px #0009)}.reelsPage .railAction[aria-pressed=true]:not(.tradeBuy):not(.tradeSell){color:#d6fa44}.reelsPage .controls{padding:60px 75px 14px 16px;bottom:38px;text-shadow:0 1px 4px #000}.reelsPage .byline{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.reelsPage .byline .link{font-size:18px;font-weight:750}.reelsPage .byline .coinPill{color:#ddfb80;background:#252b16dd;border:1px solid #869c4488;border-radius:20px;font-size:12px;font-weight:700;padding:3px 8px}.reelsPage .controls h3{font-size:15px;font-weight:500}.reelsPage .feed::-webkit-scrollbar{display:none}
+
+/* Compact navigation, using the same offset for the full-height reel feed. */
+.dock{grid-template-columns:repeat(5,minmax(0,84px));padding:1px 4px calc(2px + env(safe-area-inset-bottom))}
+.dock .dockItem{min-height:44px;justify-content:center;gap:2px;padding:0;font-size:clamp(9px,2.6vw,11px);line-height:1.2}
+.dockIcon{height:21px;width:32px}
+.dockIcon svg{height:19px;width:19px}
+.dock .center .dockIcon{width:32px;height:26px;margin-top:0;border-radius:8px;box-shadow:none}
+.reelsPage{--feed-bottom:calc(47px + env(safe-area-inset-bottom))}
+
+.discovery,.creatorProfile,.rankBoard{max-width:720px;margin-inline:auto}
+.discovery h1,.creatorProfile h1,.rankHero h1{font-size:clamp(27px,5vw,40px);margin:0}
+.viewTabs{display:flex;align-items:center;overflow-x:auto;gap:6px;border-bottom:1px solid #373b32;scrollbar-width:thin}
+.viewTabs button{min-height:44px;flex:1 0 auto;padding:6px 8px;border:0;border-radius:0;border-bottom:2px solid transparent;background:transparent;color:#bdc0b7;font-size:13px;white-space:nowrap}
+.viewTabs button[aria-pressed=true]{color:#d6fa44;border-bottom-color:#d6fa44;font-weight:750}
+.exploreField{display:flex;align-items:center;gap:8px;padding:0 12px;margin:14px 0 4px;border:1px solid #44483b;border-radius:12px;background:#20221c}
+.exploreField span{font-size:24px;color:#d6fa44}
+.exploreField #search{margin:0;padding:8px 0;min-height:42px;border:0;background:transparent}
+.exploreField:focus-within{outline:2px solid #d6fa44}
+.discovery h2,.profilePosts{font-size:16px;margin:20px 0 0}
+.exploreRow{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:1px solid #32342e}
+.exploreTitle,.rankIdentity{padding:0;border:0;background:none;color:inherit;text-align:left;min-width:0;overflow-wrap:anywhere;line-height:1.3}
+.exploreTitle small,.rankIdentity small{display:block;color:#afb1a8;margin-top:4px}
+.reelThumb{position:relative;isolation:isolate;display:block;padding:0;border:0;overflow:hidden;color:white;background:#272d20 center/cover no-repeat}
+.reelThumb video{position:absolute;z-index:-1;inset:0;width:100%;height:100%;object-fit:cover}
+.reelThumb span{position:absolute;bottom:0;left:0;right:0;text-align:left;padding:5px;background:#12140fbb;font-size:11px;font-weight:700}
+.exploreRow .reelThumb{width:82px;height:58px;flex:none;border-radius:9px}
+.creatorIntro{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.creatorDetails{min-width:0}
+.creatorDetails h1{overflow-wrap:anywhere}
+.creatorDetails p{margin:1px 0;color:#adb1a5;font-size:13px;overflow-wrap:anywhere}
+.creatorAvatar{flex:none;display:grid;place-items:center;width:clamp(57px,17vw,104px);aspect-ratio:1;border-radius:50%;border:2px solid #6f7c44;background:#2a3022 center/cover;color:#d6fa44;font-size:30px;font-weight:800}
+.creatorStats{display:flex;flex-wrap:wrap;gap:8px 16px;margin:14px 0 4px}
+.creatorStats div{display:flex;flex-direction:column-reverse}
+.creatorStats dt{font-size:12px;color:#afb1a8}
+.creatorStats dd{margin:0;font-size:16px;font-weight:800}
+.creatorActions{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}
+.creatorActions button{min-height:40px;font-size:13px}
+.creatorProfile .portfolio{padding:12px 14px;margin:14px 0 8px}
+.creatorProfile .portfolio h2{font-size:16px;margin:0}
+.creatorGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px;margin-top:4px}
+.creatorGrid .reelThumb{width:100%;aspect-ratio:3/4;border-radius:5px}
+.rankHero{padding:22px 16px;border-radius:14px;background:linear-gradient(110deg,#383f20,#1a2119 65%);border:1px solid #474e32}
+.rankFilters{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:0 12px}
+.rankFilters .viewTabs{border:0}
+.rankFilters small{color:#afb1a8}
+.myRank{display:flex;justify-content:space-between;gap:10px;padding:10px 12px;margin:6px 0;background:#20251b;border-left:3px solid #d6fa44;border-radius:6px}
+.rankList{list-style:none;margin:0;padding:0}
+.rankEntry{display:grid;grid-template-columns:24px minmax(0,1fr) auto 52px;align-items:center;gap:8px;padding:8px 0;min-height:59px;border-bottom:1px solid #32342e;font-size:13px}
+.rankNumber{color:#afb1a8;font-variant-numeric:tabular-nums}
+.rankEntry:nth-child(-n+3) .rankNumber{color:#d6fa44;font-weight:800}
+.rankEntry .reelThumb{width:52px;height:39px;border-radius:6px}
+.rankEntry .reelThumb span,.exploreRow .reelThumb span{display:none}
+.rankLoss{color:#ffa6a0}
+.emptyView{color:#b7baaf;padding:14px 0}
