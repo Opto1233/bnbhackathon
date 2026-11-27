@@ -117,6 +117,9 @@ dialog:has(#reelTicket,#momentTicket,.momentSheet) .close{z-index:2}
 .reelHashtag,.subtle{border:0;background:none;padding:2px 0;color:#d6fa44;font-size:12px}
 .reelsPage .reelRail{gap:2px;max-height:calc(100% - 145px)}
 .reelsPage .reelRail .railAction{display:grid;place-items:center;gap:1px;min-width:44px;min-height:42px;padding:3px}
+.reelRail .reelProfileLink{margin-bottom:4px;border:0}
+.reelProfileAvatar{position:relative;display:grid;place-items:center;width:38px;aspect-ratio:1;overflow:hidden;border:2px solid #fff;border-radius:50%;background:#303827;color:#d6fa44;font-size:16px;font-weight:800;box-shadow:0 1px 5px #0008}
+.reelProfileLink:focus-visible .reelProfileAvatar,.reelProfileLink:hover .reelProfileAvatar{border-color:#d6fa44}
 .railAction svg,.commentHeart svg{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .railAction[aria-pressed=true] svg,.commentHeart[aria-pressed=true] svg{color:#d6fa44;fill:#d6fa4460}
 .railAction small{font-size:10px;line-height:1}
@@ -400,3 +403,77 @@ main .link,main .guestLink{color:#d6fa44}
 .portfolio .portfolioAssets a { margin: 0; }
 .portfolioAssets li > :last-child { font-variant-numeric: tabular-nums; }
 .portfolioNote { display: block; margin-top: 12px; }
+
+main:has(.demoMarketDetail){max-width:1640px;padding-inline:clamp(12px,2.5vw,44px)}
+.demoMarketDetail{--terminal-line:#2f3431;--terminal-muted:#a7afa8;background:#131715;border:1px solid var(--terminal-line);border-radius:14px;overflow:hidden}
+.terminalToolbar{display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid var(--terminal-line);background:#191d1a}
+.terminalBack{flex:none;font-size:13px;font-weight:650}
+.terminalTabs{display:flex;flex:1;min-width:0;overflow-x:auto}
+.terminalTabs a{display:flex;align-items:center;gap:9px;flex:none;min-height:60px;padding:8px 14px;border-bottom:2px solid transparent}
+.terminalTabs a[aria-current=page]{background:#242c20;border-color:#d6fa44}
+.terminalTabs a strong,.terminalTabs a small{display:block;line-height:1.4}
+.terminalTabs a strong{font-size:13px}
+.terminalTabs a small{font-size:10px;color:var(--terminal-muted)}
+.terminalCoin{display:grid;place-items:center;width:25px;height:25px;border-radius:50%;background:#333d2a;color:#d6fa44;font-weight:750;font-size:12px}
+.terminalBody{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,270px)}
+.terminalMarket{min-width:0;padding:22px 20px 0}
+.terminalMarketTitle{display:flex;align-items:baseline;gap:9px}
+.terminalMarketTitle h1{font-size:22px;letter-spacing:-.035em}
+.terminalMarketTitle .terminalCreator{font-size:13px;color:var(--terminal-muted)}
+.terminalSummary,.terminalSummary dl{display:flex;align-items:flex-end;flex-wrap:wrap;gap:10px 24px}
+.terminalSummary{justify-content:space-between;margin:12px 0 20px}
+.terminalSummary small,.terminalSummary dt,.terminalOrder dt{font-size:11px;color:var(--terminal-muted)}
+.terminalSummary dd,.terminalOrder dd{margin:0;font-weight:650;font-variant-numeric:tabular-nums}
+.terminalSummary strong{display:block;font-size:clamp(24px,4vw,40px);letter-spacing:-.04em;line-height:1.14;font-variant-numeric:tabular-nums}
+.terminalSummary dl,.terminalOrder dl{margin:0;font-size:13px}
+.terminalPlot{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 76px;align-items:stretch}
+.terminalPlot svg{width:100%;height:clamp(245px,42dvh,490px);overflow:visible}
+.terminalGrid path,.terminalCurrentLine,.terminalPlot g[class] path{fill:none;stroke-width:1;vector-effect:non-scaling-stroke}
+.terminalGrid path{stroke:#303733;stroke-dasharray:3 4}
+.terminalCurrentLine{stroke:#a7bb72;stroke-dasharray:5 4}
+.terminalPlot .candleUp{color:#55cd97}
+.terminalPlot .candleDown{color:#f17f83}
+.terminalPlot :is(.candleUp,.candleDown) path{stroke:currentColor}
+.terminalPlot rect{fill:currentColor}
+.terminalY{position:relative;font-size:10px;color:var(--terminal-muted);font-variant-numeric:tabular-nums}
+.terminalY span,.terminalY b{position:absolute;right:0;transform:translateY(-50%);white-space:nowrap}
+.terminalY b{left:3px;right:0;background:#323e28;color:#e5f1cb;border-radius:3px;padding:2px 3px;text-align:right}
+.terminalX{display:flex;justify-content:space-between;gap:4px;padding:10px 76px 0 0;color:var(--terminal-muted);font-size:10px;white-space:nowrap}
+.terminalChartEmpty{position:absolute;inset:28% 76px auto 0;text-align:center;font-size:13px;color:var(--terminal-muted)}
+.terminalMarket .marketControls{border-top:1px solid var(--terminal-line);margin:10px -20px 0;padding:8px 16px}
+.terminalOrder{min-width:0;padding:20px 16px;background:#191d1a;border-left:1px solid var(--terminal-line)}
+.terminalOrder h2{font-size:17px;line-height:1.3;margin-bottom:12px}
+.terminalOrder dl{display:grid;gap:7px;padding:0 0 12px;border-bottom:1px solid var(--terminal-line)}
+.terminalOrder dl div{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.terminalOrder .momentOrderActions{grid-template-columns:1fr;gap:7px;margin-top:12px}
+.terminalOrder .momentOrderActions label{font-size:12px;color:var(--terminal-muted);margin:0}
+.terminalOrder .momentOrderActions input{display:block;background:#242a26;border-color:#3a443c;color:#fff;font-variant-numeric:tabular-nums;padding:8px 10px;margin-top:3px}
+.terminalOrder .momentOrderActions button{min-height:44px;margin-bottom:7px}
+.terminalOrder .momentOrderPreview{font-size:12px;overflow-wrap:anywhere}
+.terminalOrder .momentTradeStatus{font-size:12px}
+@media(max-width:740px){
+  .terminalBody{grid-template-columns:minmax(0,1fr)}
+  .terminalOrder{border-left:0;border-top:1px solid var(--terminal-line)}
+  .terminalOrder .momentOrderActions{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:auto auto}
+  .terminalOrder .momentOrderActions label:last-of-type{grid-column:2;grid-row:1}
+  .terminalOrder .momentOrderActions input{min-width:0}
+  .terminalOrder .momentOrderActions button{margin:0}
+}
+@media(max-width:480px){
+  .terminalToolbar{gap:7px;padding-inline:8px}
+  .terminalBack{font-size:11px}
+  .terminalTabs a{gap:5px;min-height:52px;padding:6px 8px}
+  .terminalTabs a small{display:none}
+  .terminalMarket{padding-inline:12px}
+  .terminalMarket .marketControls{margin-inline:-12px;padding-inline:8px}
+  .terminalPlot{grid-template-columns:minmax(0,1fr) 58px}
+  .terminalX{padding-right:58px}
+  .terminalX span:nth-child(3){display:none}
+  .terminalChartEmpty{right:58px}
+}
+
+.marketDemoNotice{margin:12px 0 0;color:#b3b1ba;font-size:12px}
+#momentTicket .marketDemoNotice{margin:8px 0 12px}
+.momentLaunchReview{display:grid;gap:5px;margin:14px 0;padding:10px 0;border-top:1px solid #393c32;color:#c2c6b8;font-size:12px}
+.momentLaunchReview h3,.momentLaunchReview strong{color:#f7f6fa}
+.momentOriginalLink{color:#d6fa44}

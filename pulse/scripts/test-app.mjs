@@ -57,10 +57,11 @@ const beforeSample=JSON.stringify(momentLedger());
 const marketNow=18_000+(4*250_000+3)*22_000;
 const simulated=sampleTrades('moment-bot',marketNow);
 assert.equal(simulated.length,4);
-assert.deepEqual(simulated.map(trade=>trade.side),['sell','sell','buy','buy']);
-assert.equal(simulated[0].actor,simulated[2].actor);
-assert.equal(simulated[1].actor,simulated[3].actor);
-assert.equal(BigInt(simulated[0].amount)+BigInt(simulated[1].amount),BigInt(simulated[2].amount)+BigInt(simulated[3].amount));
+for(const [index,fill] of simulated.slice(0,-1).entries()){
+  const previous=simulated[index+1];
+  assert.equal(previous.sold+(fill.side==='buy'?fill.quantity:-fill.quantity),fill.sold);
+  assert.equal(BigInt(fill.amount), (momentCurve.reserve(fill.sold)-momentCurve.reserve(previous.sold))*(fill.side==='buy'?1n:-1n));
+}
 assert.equal(sampleTrades('moment-custom',demoStartedAt).length,0);
 assert.equal(sampleTrades('saved',demoStartedAt).length,0);
 s.watchlist=['moment-bot'];
@@ -99,6 +100,17 @@ assert.ok(!sampleMarketStats('creator-1',Date.now()).includes('<b>—</b>'));
 s.channels.push({id:'shared-creator',name:'Shared Studio',coin:'LIVE',shared:true,followers:[]});
 assert.match(sampleMarketStats('creator-shared-creator',Date.now()),/Market cap chart/);
 assert.match(marketHome(),/demoCreatorTrade:shared-creator/);
+assert.doesNotMatch(marketHome(),/Testnet fills/);
+const detail=trade('1'), snapshot=demoMarketSnapshot('creator-1',marketPaintedAt);
+assert.match(detail,/aria-label="Market cap candlestick chart"/);
+assert.ok(detail.includes(marketUsd(snapshot.marketCap)));
+assert.match(detail,/aria-label="Demo order"/);
+const candles=marketCandles([
+  {time:10,marketCap:3},{time:11,marketCap:5},{time:12,marketCap:4},{time:20,marketCap:2}
+],0,640);
+assert.deepEqual(candles,[{slot:1,open:3,high:5,low:3,close:4},{slot:2,open:4,high:4,low:2,close:2}]);
+assert.ok(marketHome().includes(marketUsd(snapshot.marketCap)));
+assert.match(sampleMarketStats('moment-local:custom',marketNow),/Market cap chart/);
 s.profileFollows={me:['1']};query='';exploreTab='following';
 assert.match(exploreResults(),/Tokyo Afterhours/);
 assert.doesNotMatch(exploreResults(),/Ocean Motion/);

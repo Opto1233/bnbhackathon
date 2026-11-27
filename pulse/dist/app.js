@@ -435,7 +435,9 @@ function reelActions(c){
     return '<button type="button" class="railAction '+(showLabel?'reelTrade':'reelIconAction')+'" data-act="'+esc(act)+'" aria-label="'+label+(count===null?'':' · '+fmt(count))+'" title="'+label+'"'+state+'>'+
       reelIcon(icon)+(showLabel?label:'')+(count===null?'':'<small>'+(compact?shortNumber.format(count):fmt(count))+'</small>')+'</button>';
   }
-  const actions=[];
+  const creator=chan(c.owner);
+  const actions=creator?['<a class="railAction reelProfileLink" href="#Profile/'+encodeURIComponent(creator.id)+
+    '" aria-label="View '+esc(creator.name)+'’s profile">'+profileAvatar(creator,'reelProfileAvatar')+'</a>']:[];
   actions.push(control('Trade','trade','reelTrade:'+c.id,{showLabel:true}));
   actions.push(control('Like','like','toggle:likes:'+c.id,{pressed:s.likes.includes(c.id)||community.reactions.some(r=>r.actor===myId()&&r.kind==='like'&&r.target===c.id),count:reelLikeCount(c),compact:true}));
   actions.push(control('Comments','comments','comments:'+c.id,{count:reelComments(c.id).length}));
@@ -446,7 +448,8 @@ function reelActions(c){
   return '<div class="reelRail" role="group" aria-label="Video actions">'+actions.join('')+'</div>';
 }
 function feedItems(id){
-  return s.clips.filter(reel=>reel.id===id||!pausedReelIds.has(reel.id));
+  const featured=['96794469-9ed3-464d-bcf8-ef1ae01e2389','c88de560-388b-43d7-8f55-8228138e905c','1'];
+  return [...new Set(id?[id,...featured]:featured)].map(clip).filter(Boolean);
 }
 function feed(id){
   if(id&&!clip(id))return missingResource('video','Clips');
@@ -587,15 +590,17 @@ document.addEventListener('visibilitychange',()=>{
   }
 });
 let marketGroup='creators';
+const marketDemoNotice='Charts and trades in this market are simulated.';
+const openFourExplorer='https://testnet.bscscan.com';
+const momentCreatorAllocation='The launch model reserves 10% of the total supply for the original clip creator. That share stays locked until the coin moves to the liquidity pool.';
 const marketWindows={'1m':60000,'5m':300000,'30m':1800000,'1h':3600000,'24h':86400000};
-let marketRange='1h',useTestnetFills=false,marketPaintedAt=0;
+let marketRange='1h',marketPaintedAt=0;
 const marketDemoUsdRate=600;
 const marketUsdFormatter=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:6});
 function marketUsd(amount){
   const usd=Number(amount)*marketDemoUsdRate;
   return usd>0&&usd<0.000001?'<span title="Less than one millionth of a dollar">&lt;$0.000001</span>':marketUsdFormatter.format(usd);
 }
-const sampleTradeActors=['Mina','Jay','Nara','Pim','June','Arun'];
 const sampleTradeMarkets=[
   {id:'1',type:'creator',lot:6800,delay:14},
   {id:'2',type:'creator',lot:4600,delay:9},
@@ -608,16 +613,24 @@ function isSampleMoment(id,coin){
   const example=demoMoments[id];
   return Boolean(example&&coin&&!coin.id&&coin.name===example.name&&coin.offset===example.offset);
 }
+function momentSampleScope(reel,coin){
+  return isSampleMoment(reel.id,coin)?'moment-'+reel.id:'moment-local:'+(coin.ledgerId||coin.id||reel.id);
+}
 function sampleTrades(scope,now,range=marketRange,limit=4){
   let markets=sampleTradeMarkets;
+  const localMoment=scope.startsWith('moment-local:');
+  if(localMoment){
+    const id=scope.slice(13),seed=demoMetricSeed(id);
+    markets=[{id,type:'moment',lot:7500+seed*300,delay:seed%12}];
+  }
   if(scope.startsWith('creator-')&&!markets.some(m=>m.type==='creator'&&'creator-'+m.id===scope)){
     const id=scope.slice(8),seed=demoMetricSeed(id);
     markets=[...markets,{id,type:'creator',lot:3200+seed*150,delay:seed%12}];
   }
   return markets.flatMap(({id,type,lot,delay},index)=>{
     const coin=type==='moment'?demoMoments[id]:chan(id);
-    if(type==='moment' ? !momentsFor(id).some(moment=>isSampleMoment(id,moment)) : !coin?.coin) return [];
-    const key=type==='moment'?'moment-'+id:'creator-'+id;
+    if(!localMoment&&(type==='moment' ? !momentsFor(id).some(moment=>isSampleMoment(id,moment)) : !coin?.coin)) return [];
+    const key=localMoment?scope:type==='moment'?'moment-'+id:'creator-'+id;
     const onWatchlist=s.watchlist?.includes(type==='moment'?'moment-'+id:id);
     if(scope==='creators' ? type!=='creator' : scope==='moments' ? type!=='moment' :
       scope==='saved' ? !onWatchlist : scope!==key) return [];
@@ -626,34 +639,39 @@ function sampleTrades(scope,now,range=marketRange,limit=4){
     const start=delay*1000;
     const latest=Math.floor((now-start)/interval);
     const firstSlot=Math.ceil((now-marketWindows[range]-start)/interval);
-    const openingSupply=35000+index*8500;
+    const seed=demoMetricSeed(id);
+    const openingSupply=42000+seed*4200;
+    const supplyAt=slot=>{
+      const time=(start+slot*interval)/1000;
+      const wave=0.52*Math.sin(time/(4291+seed*151)+seed)+0.31*Math.sin(time/(643+seed*31)+seed*.67)
+        +0.22*Math.sin(time/(109+seed*7))+0.12*Math.sin(time/(21+seed%6))+0.05*Math.sin(slot*2.39+seed);
+      return Math.round(openingSupply+lot*wave);
+    };
     return Array.from({length:Math.min(limit,latest-firstSlot+1)},(_,offset)=>{
       const slot=latest-offset;
-      const sequence=slot+(type==='creator'?index:0);
-      const phase=((sequence%4)+4)%4;
-      const cycle=Math.floor(sequence/4);
-      const first=Math.round((lot+((Math.abs(cycle)+index)%5)*lot/8)/100)*100;
-      const second=Math.round(first*.6/100)*100;
-      // Two fictional wallets build positions, then sell their respective lots.
-      const [from,to]=[[0,first],[first,first+second],[first+second,second],[second,0]][phase];
-      const before=openingSupply+from,after=openingSupply+to;
+      const before=supplyAt(slot-1),after=supplyAt(slot);
       const side=after>before?'buy':'sell';
       const quantity=Math.abs(after-before);
-      const actor=sampleTradeActors[((cycle+phase%2+index)%6+6)%6];
       const curve=type==='moment'?momentCurve:demoCreatorCurve;
       const amount=curve.reserve(Math.max(before,after))-curve.reserve(Math.min(before,after));
-      return {name:type==='moment'?coin.name:'$'+coin.coin,actor,side,quantity,amount:String(amount),
+      return {side,quantity,amount:String(amount),
         time:start+slot*interval,sold:after,marketCap:curveMarketCap(after,curve)};
     });
-  }).sort((a,b)=>b.time-a.time).slice(0,limit);
+  }).filter(fill=>fill.quantity>0).sort((a,b)=>b.time-a.time).slice(0,limit);
 }
 setInterval(()=>{
   if(document.hidden||$('dialog')?.open)return;
+  const detail=$('.demoMarketDetail');
+  if(detail){
+    if(detail.querySelector('.momentOrderPreview').hidden)refreshTradeTerminal(detail);
+    return;
+  }
   const rows=document.querySelectorAll('[data-sample-stats]');
   if(!rows.length)return;
   const now=marketPaintedAt=Date.now();
   for(const row of rows){
-    const stats=sampleMarketStats(row.dataset.sampleStats,now);
+    const snapshot=demoMarketSnapshot(row.dataset.sampleStats,now);
+    const stats=marketStats(snapshot,now);
     if(row.innerHTML!==stats)row.innerHTML=stats;
   }
 },5000);
@@ -699,7 +717,8 @@ function marketStats({marketCap,holders,top10,fills,format,historyStart,liquidit
   const change=prices.length>1&&first>0?(lastPrice-first)/first*100:null;
   const tone=change===null?'':change<0?'negative':'positive';
   const partial=historyStart!=null&&historyStart>since;
-  let chart='<small>'+(periodFills.length?'No market cap history':partial?'No fills in available history':'No fills in '+range)+'</small>';
+  let chart=marketCap==null?'<small>No market cap history</small>':
+    '<svg viewBox="0 0 100 32" preserveAspectRatio="none" role="img" aria-label="Market cap unchanged · '+range+'"><polyline points="2,16 98,16"/></svg>';
   if(prices.length){
     const low=Math.min(...prices), span=Math.max(...prices)-low;
     const points=Array.from({length:Math.min(prices.length,80)},(_,i)=>{
@@ -722,25 +741,30 @@ function marketStats({marketCap,holders,top10,fills,format,historyStart,liquidit
     stat('TXNs',fmt(periodFills.length)+' <small><span class="positive" title="Buys">'+fmt(buys)+' B</span> / <span class="negative" title="Sells">'+fmt(periodFills.length-buys)+' S</span></small>')+
     '</div>'+marketAudit(holders,top10,audit)+(partial?'<small class="marketDataStatus">Partial window · last 1,000 Testnet blocks</small>':'');
 }
-function sampleMarketStats(scope,now){
-  const market=scope.startsWith('creator-')?scope:scope.slice(7);
-  const curve=scope.startsWith('creator-')?demoCreatorCurve:momentCurve;
-  const position=demoTradePosition(momentLedger(),market,scope,now);
-  return marketStats({...demoMarketMetrics(market,position,curve),marketCap:curveMarketCap(position.sold,curve),
-    fills:demoMarketHistory(position,scope,now,marketRange,curve),format:momentBNB},now);
+function demoMarketSnapshot(scope,now){
+  const creator=scope.startsWith('creator-');
+  const marketId=creator?scope:scope.startsWith('moment-local:')?scope.slice(13):scope.slice(7);
+  const curve=creator?demoCreatorCurve:momentCurve;
+  const position=demoTradePosition(momentLedger(),marketId,scope,now);
+  return {...demoMarketMetrics(marketId,position,curve),position,curve,
+    marketCap:curveMarketCap(position.sold,curve),
+    fills:demoMarketHistory(position,scope,now,marketRange,curve),format:momentBNB};
 }
-function marketRow({name,detail,art,key,action,stats,creatorId,sampleScope,age,views}){
+function sampleMarketStats(scope,now){
+  return marketStats(demoMarketSnapshot(scope,now),now);
+}
+function marketRow({name,detail,art,key,action,stats,sampleScope,age,views,marketRoute,onchain}){
   const saved=s.watchlist?.includes(key);
   return '<article class="marketRow"><div class="marketIdentity"><span class="assetArt" aria-hidden="true" style="'+art+'">'+(art?'':esc(name[0]))+'</span>'+
-    '<div class="assetName"><strong>'+esc(name)+'</strong>'+(sampleScope?' <span class="demoLabel">Demo</span>':'')+'<small>'+detail+'</small><small class="marketIdentityStats">'+
+    '<div class="assetName"><strong>'+(marketRoute?link(esc(name),marketRoute,'marketCoinLink'):esc(name))+'</strong>'+(onchain?' <span class="demoLabel">OpenFour</span>':sampleScope?' <span class="demoLabel">Demo</span>':'')+'<small>'+detail+'</small><small class="marketIdentityStats">'+
     marketBadge('Age',esc(marketAge(age)),'Time since launch')+marketBadge('Views',fmt(views),'Source video views')+
-    marketBadge('Fee','0%','Pulse protocol fee')+'</small></div></div>'+
-    '<div class="marketStats"'+(creatorId?' data-creator-stats="'+esc(creatorId)+'"':'')+(sampleScope?' data-sample-stats="'+esc(sampleScope)+'"':'')+'>'+stats+'</div>'+
+    (onchain?'':marketBadge('Fee','0%','Pulse protocol fee'))+'</small></div></div>'+
+    '<div class="marketStats"'+(sampleScope?' data-sample-stats="'+esc(sampleScope)+'"':'')+'>'+stats+'</div>'+
     '<div class="marketActions">'+action+'<button class="star" data-act="watch:'+esc(key)+'" aria-pressed="'+!!saved+
     '" aria-label="Watchlist: '+esc(name)+'">'+(saved?'★':'☆')+'</button></div></article>';
 }
 function shareMomentButton(coin,reel){
-  return shared&&coin&&!coin.published&&!community.moments.some(m=>m.id===coin.publishId)&&s.moments?.[reel.id]?btn('Publish to shared market',momentAction('publishMoment',reel,coin),'subtle'):'';
+  return shared&&coin&&!coin.openFour&&!coin.published&&!community.moments.some(m=>m.id===coin.publishId)&&s.moments?.[reel.id]?btn('Publish to shared market',momentAction('publishMoment',reel,coin),'subtle'):'';
 }
 async function publishSavedMoment(reel,coin,button){
   if(!coin||coin.published||button.disabled||!requireCommunityAccount())return;
@@ -772,18 +796,14 @@ function momentMarket(now){
   const moments=s.clips.flatMap(reel=>momentsFor(reel.id).map(coin=>({reel,coin,id:coin.id||reel.id})))
     .filter(({id})=>marketGroup!=='saved'||s.watchlist?.includes('moment-'+id));
   if(!moments.length)return '';
-  const ledger=momentLedger();
-  return '<section class="momentMarket"><h2>Moment Coins <span class="demoLabel">Demo</span></h2><p class="marketScope">Liquidity and holder metrics are illustrative. Trades you confirm here are saved in this browser.</p>'+
+  return '<section class="momentMarket"><h2>Moment Coins</h2><p class="marketScope">Demo rows show simulated metrics. OpenFour rows trade on BSC Testnet.</p>'+
     moments.map(({reel,coin,id})=>{
-      const position=momentPosition(ledger,coin.ledgerId||id);
-      const sampleScope=isSampleMoment(reel.id,coin)?'moment-'+reel.id:null;
+      const sampleScope=coin.openFour?null:momentSampleScope(reel,coin);
       return marketRow({
         name:coin.name,detail:esc(reel.title)+' · '+momentTime(coin.time)+' · '+esc(coin.launcher||'You'),
         art:frameArt(coin,reel),key:'moment-'+id,views:last(reel.views),
         age:momentCreatedAt(coin)??(epoch-(2+demoMetricSeed(id))*3600000),action:btn('Trade',momentAction('tradeMoment',reel,coin),'marketTrade'),
-        sampleScope,stats:sampleScope?sampleMarketStats(sampleScope,now):marketStats({marketCap:momentMarketCap(position),
-          ...demoMarketMetrics(id,position,momentCurve),
-          fills:demoMarketHistory(position,null,now,marketRange,momentCurve),format:momentBNB},now)
+        sampleScope,onchain:Boolean(coin.openFour),stats:coin.openFour?'<small>BSC Testnet · Bonding V1</small>':sampleMarketStats(sampleScope,now)
       });
     }).join('')+'</section>';
 }
@@ -791,67 +811,120 @@ function marketHome(){
   const now=marketPaintedAt=Date.now();
   const visible=marketGroup==='moments'?[]:s.channels.filter(c=>c.coin&&(marketGroup!=='saved'||s.watchlist?.includes(c.id)));
   const moments=marketGroup==='creators'?'':momentMarket(now);
-  const canSwitch=visible.length>0;
   const timeControls=viewTabs('Market timeframe',Object.keys(marketWindows).map(key=>[key,key]),marketRange,'marketTime');
-  const sourceControls=canSwitch?viewTabs('Creator coin activity source',
-    [['demo','Demo activity'],['testnet','Testnet fills']],useTestnetFills?'testnet':'demo','marketSource'):'';
-  return '<div class="marketHome"><div class="balanceBlock"><div><small>BSC TESTNET · CHAIN 97</small><h1>Coin markets</h1><p>Market values use a demo rate of '+marketUsd(1)+' per tBNB.</p></div></div>'+
+  return '<div class="marketHome"><div class="balanceBlock"><div><small>PROTOTYPE</small><h1>Coin markets</h1><p>Market values use a demo rate of '+marketUsd(1)+' per tBNB.</p></div></div>'+
     '<div class="marketTabs" role="group" aria-label="Coin markets">'+
     [['creators','Creator Coins'],['moments','Moment Coins'],['saved','Watchlist']].map(([key,label])=>
       '<button type="button" class="'+(key===marketGroup?'selected':'')+'" data-act="group:'+key+
       '" aria-pressed="'+(key===marketGroup)+'">'+label+'</button>').join('')+'</div>'+
-    '<div class="marketControls">'+timeControls+sourceControls+'</div>'+
-    (visible.length?'<h2>Creator Coins</h2><p class="marketScope">'+(canSwitch&&!useTestnetFills?
-      'Demo markets use simulated trades, liquidity, and holder metrics.':
-      'BSC Testnet trade history covers up to 1,000 recent blocks.')+' Market cap uses circulating coins.</p>'+
+    '<div class="marketControls">'+timeControls+'</div>'+
+    (visible.length?'<h2>Creator Coins</h2><p class="marketScope">Demo markets use simulated trades, liquidity, and holder metrics. Market cap uses circulating coins.</p>'+
       visible.map(c=>{
-        const sampleScope=!useTestnetFills?'creator-'+c.id:null;
+        const sampleScope='creator-'+c.id;
         return marketRow({
         name:'$'+c.coin,detail:esc(c.name),art:c.shared||c.id==='me'?'':'background-image:url(media/'+encodeURIComponent(c.id)+'.jpg)',
-        key:c.id,age:sampleScope?epoch-(5+demoMetricSeed(c.id))*3600000:null,
+        key:c.id,marketRoute:'Trading/'+c.id,age:epoch-(5+demoMetricSeed(c.id))*3600000,
         views:s.clips.filter(reel=>reel.owner===c.id).reduce((total,reel)=>total+last(reel.views),0),
-        action:sampleScope?btn('Trade','demoCreatorTrade:'+esc(c.id),'marketTrade'):link('Trade','Trading/'+c.id,'marketTrade'),
-        creatorId:sampleScope?null:c.id,sampleScope,
-        stats:sampleScope?sampleMarketStats(sampleScope,now):'<small class="marketDataStatus">Loading market data…</small>'
+        action:btn('Trade','demoCreatorTrade:'+esc(c.id),'marketTrade'),sampleScope,
+        stats:sampleMarketStats(sampleScope,now)
         });
       }).join(''):'')+
     (!visible.length&&!moments?'<p class="emptyMarket">'+(marketGroup==='saved'?'Star a coin to add it to your watchlist.':'No coins available.')+'</p>':'')+moments+'</div>';
-}
-let creatorMarketSnapshot;
-async function paintMarketRows(){
-  const rows=[...document.querySelectorAll('[data-creator-stats]')];
-  if(!rows.length)return;
-  const creators=rows.map(row=>chan(row.dataset.creatorStats));
-  const key=JSON.stringify(creators.map(creator=>[creator.id,creator.walletId]));
-  if(creatorMarketSnapshot?.key!==key||Date.now()-creatorMarketSnapshot.time>=15000){
-    creatorMarketSnapshot={key,time:Date.now(),request:window.pulseWallet.marketSnapshot(creators)};
-  }
-  let snapshot;
-  try{snapshot=await creatorMarketSnapshot.request;}
-  catch{snapshot=new Map();}
-  for(const row of rows){
-    if(!row.isConnected)continue;
-    const data=snapshot.get(row.dataset.creatorStats);
-    if(data&&!data.status)row.innerHTML=marketStats(data,data.asOf);
-    else{
-      const message=document.createElement('small');
-      message.className='marketDataStatus';
-      message.textContent=data?.status||'Market data unavailable';
-      row.replaceChildren(message);
-    }
-  }
 }
 function missingResource(type,home){
   if(shared&&sharedProfileStatus==='loading')return '<p role="status">Loading '+type+'…</p>';
   if(shared&&sharedProfileStatus==='failed')return '<p role="alert">Could not load this '+type+'.</p>'+btn('Retry','retrySharedProfile');
   return '<h1>'+type[0].toUpperCase()+type.slice(1)+' not found</h1>'+link('Browse '+(type==='video'?'videos':'markets'),home);
 }
+function marketCandles(fills,since,now){
+  const width=Math.ceil((now-since)/64);
+  const buckets=new Map();
+  let previous;
+  for(const fill of fills){
+    const value=Number(fill.marketCap);
+    const slot=Math.min(63,Math.floor((fill.time-since)/width));
+    const candle=buckets.get(slot);
+    if(candle){
+      candle.high=Math.max(candle.high,value);
+      candle.low=Math.min(candle.low,value);
+      candle.close=value;
+    }else{
+      const open=previous??value;
+      buckets.set(slot,{slot,open,high:Math.max(open,value),low:Math.min(open,value),close:value});
+    }
+    previous=value;
+  }
+  return [...buckets.values()];
+}
+function tradingChart(snapshot,now){
+  const since=now-marketWindows[marketRange];
+  const candles=marketCandles(snapshot.fills,since,now);
+  const current=Number(snapshot.marketCap);
+  const low=Math.min(current,...candles.map(candle=>candle.low));
+  const high=Math.max(current,...candles.map(candle=>candle.high));
+  const pad=(high-low)*.16||Math.max(current*.015,.000001);
+  const min=Math.max(0,low-pad),max=high+pad;
+  const y=value=>260*(max-value)/(max-min);
+  const ticks=Array.from({length:5},(_,i)=>i/4);
+  const axisNumber=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:2});
+  const timeLabel=new Intl.DateTimeFormat('en-US',marketRange==='24h'?{month:'short',day:'numeric',hour:'numeric'}:
+    {hour:'2-digit',minute:'2-digit',...(marketRange==='1m'?{second:'2-digit'}:{})});
+  const grid=ticks.map(tick=>'<path d="M0 '+260*tick+'H1000 M'+1000*tick+' 0V260"/>').join('');
+  const currentLine='<path class="terminalCurrentLine" d="M0 '+y(current)+'H1000"/>';
+  const bars=candles.map(({slot,open,close,high,low})=>{
+    const x=(slot+.5)*1000/64,bottom=Math.max(y(open),y(close)),top=Math.min(y(open),y(close));
+    return '<g class="'+(close>=open?'candleUp':'candleDown')+'"><path d="M'+x+' '+y(high)+'V'+y(low)+'"/>'+
+      '<rect x="'+(x-5)+'" y="'+top+'" width="10" height="'+Math.max(1.2,bottom-top)+'"/></g>';
+  }).join('');
+  return '<div class="terminalPlot"><svg viewBox="0 0 1000 260" preserveAspectRatio="none" role="img" aria-label="Market cap candlestick chart">'+
+    '<g class="terminalGrid">'+grid+'</g>'+currentLine+bars+'</svg>'+
+    '<div class="terminalY" aria-hidden="true">'+ticks.map(tick=>'<span style="top:'+tick*100+'%">'+axisNumber.format((max-tick*(max-min))*marketDemoUsdRate)+'</span>').join('')+
+    '<b style="top:'+y(current)/2.6+'%">'+axisNumber.format(current*marketDemoUsdRate)+'</b></div>'+
+    (!candles.length?'<p class="terminalChartEmpty">No trades in this window</p>':'')+'</div>'+
+    '<div class="terminalX">'+[0,1/3,2/3,1].map(tick=>'<span>'+esc(timeLabel.format(since+tick*(now-since)))+'</span>').join('')+'</div>';
+}
+function terminalSummary(snapshot){
+  const {marketCap,liquidity,fills}=snapshot;
+  const volume=fills.reduce((sum,fill)=>sum+BigInt(fill.amount),0n);
+  return '<div><small>Market cap · USD</small><strong>'+marketUsd(marketCap)+'</strong></div>'+
+    '<dl><div><dt>Liquidity</dt><dd>'+marketUsd(liquidity)+'</dd></div><div><dt>Volume · '+marketRange+'</dt><dd>'+marketUsd(momentBNB(volume))+
+    '</dd></div><div><dt>Trades</dt><dd>'+fmt(fills.length)+'</dd></div></dl>';
+}
+function refreshTradeTerminal(root){
+  const now=marketPaintedAt=Date.now();
+  const snapshot=demoMarketSnapshot(root.dataset.marketScope,now);
+  root.querySelector('.terminalSummary').innerHTML=terminalSummary(snapshot);
+  root.querySelector('.terminalChart').innerHTML=tradingChart(snapshot,now);
+  const ledger=momentLedger();
+  root.querySelector('.terminalBalance').textContent=momentBNB(BigInt(ledger.cash))+' tBNB';
+  root.querySelector('.terminalOwned').textContent=fmt(snapshot.position.owned);
+  root.querySelector('.tradeBuy').disabled=snapshot.position.sold===snapshot.curve.cap;
+}
 function trade(id){
   if(!id)return marketHome();
   const c=s.channels.find(x=>x.coin&&x.id===id);
   if(!c)return missingResource('market','Trading');
-  return heading('Trading','BSC Testnet · tBNB',link('All markets','Trading',''))+
-    '<div class="layout"><section class="panel"><h2>'+esc(c.name)+'</h2>'+link('View profile','Profile/'+c.id)+'<p>Channel coin $'+esc(c.coin)+'</p></section><section class="panel chainPanel" id="chainPanel"></section></div>'+
+  const now=marketPaintedAt=Date.now();
+  const scope='creator-'+c.id;
+  const snapshot=demoMarketSnapshot(scope,now);
+  const tabs=s.channels.filter(channel=>channel.coin).map(channel=>{
+    const current=channel.id===id;
+    return '<a href="#Trading/'+esc(channel.id)+'"'+(current?' aria-current="page"':'')+'><span class="terminalCoin" aria-hidden="true">'+
+      esc(channel.coin[0])+'</span><span><strong>$'+esc(channel.coin)+'</strong><small>'+esc(channel.name)+'</small></span></a>';
+  }).join('');
+  return '<section class="demoMarketDetail" aria-label="Trading terminal" data-market-scope="'+esc(scope)+'">'+
+    '<div class="terminalToolbar">'+link('‹ All markets','Trading','terminalBack')+'<div class="terminalTabs" role="group" aria-label="Creator markets">'+tabs+'</div>'+
+    '<span class="demoLabel">Demo</span></div>'+
+    '<div class="terminalBody"><section class="terminalMarket" aria-label="Market history">'+
+    '<div class="terminalMarketTitle"><h1>$'+esc(c.coin)+'</h1>'+link(esc(c.name),'Profile/'+c.id,'terminalCreator')+'</div>'+
+    '<div class="terminalSummary">'+terminalSummary(snapshot)+'</div>'+
+    '<div class="terminalChart">'+tradingChart(snapshot,now)+'</div>'+
+    '<div class="marketControls">'+viewTabs('Market timeframe',Object.keys(marketWindows).map(key=>[key,key]),marketRange,'marketTime')+'</div></section>'+
+    '<aside class="terminalOrder" aria-label="Demo order"><h2>Place order</h2>'+
+    '<dl><div><dt>Demo balance</dt><dd class="terminalBalance">'+momentBNB(BigInt(momentLedger().cash))+' tBNB</dd></div>'+
+    '<div><dt>Your coins</dt><dd class="terminalOwned">'+fmt(snapshot.position.owned)+'</dd></div></dl>'+
+    orderFields('terminalOrderForm',snapshot.position.sold===snapshot.curve.cap,true)+
+    '<p class="marketDemoNotice">'+marketDemoNotice+'</p></aside></div></section>'+
     '<h2 class="sectionhead">Latest videos</h2>'+cards(newest(s.clips.filter(x=>x.owner===c.id)));
 }
 function momentHoldings(){
@@ -867,11 +940,9 @@ function momentHoldings(){
 }
 function paintWallet(){
   if($('#holdings'))window.pulseWallet.portfolio($('#holdings'),s.channels,marketDemoUsdRate);
-  const chartOptions={range:marketRange,windowMs:marketWindows[marketRange],toUsd:marketDemoUsdRate};
-  const sheet=$('#reelTicket');if(sheet&&$('dialog').open)window.pulseWallet.panel(sheet,chan(sheet.dataset.owner),chartOptions);
-  const root=$('#chainPanel');if(root)window.pulseWallet.panel(root,chan(path()[1]),chartOptions);
+
 }
-window.addEventListener('pulse-wallet-change',()=>{if(accountScope!==(window.pulseWallet.account?.()||myId())){switchAccount();$('dialog')?.close();if(shared)loadShared();}if(path()[0]==='Login'&&!window.pulseWallet.signed()&&$('#walletLogin button:disabled'))return;if($('#reelTicket')&&$('dialog').open){paintWallet();return;}render();});
+window.addEventListener('pulse-wallet-change',()=>{if(accountScope!==(window.pulseWallet.account?.()||myId())){switchAccount();$('dialog')?.close();if(shared)loadShared();}if(path()[0]==='Login'&&!window.pulseWallet.signed()&&$('#walletLogin button:disabled'))return;render();});
 window.addEventListener('pulse-creator-linked',event=>{const c=self();if(c&&!c.walletId){c.walletId=event.detail;save();paintWallet();}});
 const rankMetrics=[
   [['gained','Views gained'],['growth','View growth']],
@@ -1019,8 +1090,17 @@ function render({latestChat=false}={}){
   feedRoute=p==='Clips'?location.hash:null;
   const oldThread=$('.inboxThread');
   const chatTop=!latestChat&&p==='Inbox'&&oldThread&&$('#inboxMessage').dataset.person===id&&!atChatBottom(oldThread)?oldThread.scrollTop:null;
-  $('main').innerHTML=({Login:loginScreen,Trending:trending,Search:search,Clips:feed,Trading:trade,Inbox:inbox,Profile:profile})[p](id);observe(previous);paintWallet();paintMarketRows();
+  $('main').innerHTML=({Login:loginScreen,Trending:trending,Search:search,Clips:feed,Trading:trade,Inbox:inbox,Profile:profile})[p](id);observe(previous);paintWallet();
   if(p==='Inbox')mountChatHistory(chatTop);
+  const terminal=$('.demoMarketDetail');
+  if(p==='Trading'&&terminal){
+    const marketId=terminal.dataset.marketScope;
+    mountDemoOrder(terminal,{marketId,curve:demoCreatorCurve,sampleScope:marketId},()=>marketPaintedAt,()=>{
+      refreshTradeTerminal(terminal);
+      terminal.querySelector('.momentOrderPreview').hidden=true;
+      terminal.querySelector('input').focus({preventScroll:true});
+    });
+  }
   if(p==='Login')window.pulseWallet.loginPage($('#walletLogin'),()=>{
     if(['create','channel','launch'].includes(id)){go('Profile');action(id);return;}
     go(['portfolio','profile'].includes(id)?'Profile':id&&chan(id)?.coin?'Trading/'+id:'Clips');
@@ -1098,9 +1178,9 @@ function settleMoment(reelId,preview,curve=momentCurve,sampleScope=null){
   localStorage.setItem(ledgerKey(),JSON.stringify(ledger));
   return quote;
 }
-function momentMarketChart(curve,fills){
-  const values=fills.map(fill=>curve.price(fill.sold)*BigInt(fill.sold));
-  if(!values.length)return '<p class="momentChartEmpty">No trades in the selected '+marketRange+' window.</p>';
+function momentMarketChart(curve,fills,sold){
+  const current=curve.price(sold)*BigInt(sold);
+  const values=fills.length?fills.map(fill=>curve.price(fill.sold)*BigInt(fill.sold)):[current,current];
   const min=values.reduce((a,b)=>a<b?a:b), max=values.reduce((a,b)=>a>b?a:b);
   const y=value=>15+90*(1-Number(value-min)/Number(max-min||1n));
   const count=Math.min(values.length,120);
@@ -1116,7 +1196,8 @@ function momentMarketChart(curve,fills){
     '<path class="plotGuide" d="M8 '+mark[1]+'H312"/>'+
     series+'</svg>'+
     '<div class="momentPlotScale'+(max===min?' flat':'')+'"><span>'+marketUsd(momentBNB(max))+'</span>'+(max===min?'':'<span>'+marketUsd(momentBNB(min))+'</span>')+'</div></div>'+
-    '<div class="momentPlotAxis"><span>First shown fill</span><span>Latest fill</span></div>';
+    '<div class="momentPlotAxis">'+(fills.length?'<span>First shown fill</span><span>Latest fill</span>':
+      '<span>No new trades in '+marketRange+'</span><span>Current market cap</span>')+'</div>';
 }
 function momentFillList(fills){
   const rows=fills.slice().reverse().map(fill=>{
@@ -1128,9 +1209,65 @@ function momentFillList(fills){
 }
 function openMomentTrade(reel,coin,options={}){
   if(!coin)return;
+  if(coin.openFour)return openOpenFourTrade(reel,coin,options);
   const coinId=coin.id||reel.id, marketId=coin.ledgerId||coinId;
   openDemoTrade({reel,coin,marketId,curve:momentCurve,
-    sampleScope:isSampleMoment(reel.id,coin)?'moment-'+reel.id:null},options);
+    sampleScope:momentSampleScope(reel,coin)},options);
+}
+function openFourTx(hash,label='View transaction'){
+  return /^0x[0-9a-f]{64}$/i.test(hash)?'<a href="'+openFourExplorer+'/tx/'+hash+'" target="_blank" rel="noopener">'+label+'</a>':'';
+}
+function openOpenFourTrade(reel,coin,{back=()=>$('dialog').close()}={}){
+  const market=coin.openFour;
+  const token=esc(market.token);
+  modal('<section id="momentTicket" aria-label="OpenFour Moment Coin trading"><button type="button" class="momentBack" aria-label="Back">←</button>'+
+    '<h2>'+esc(coin.name)+' <span class="demoLabel">OpenFour</span></h2>'+
+    '<p class="momentSource">BSC Testnet · Bonding V1 · Original clip by '+esc(chan(reel.owner).name)+'</p>'+
+    '<p class="momentSource">'+link('Watch original clip','Clips/'+reel.id,'momentOriginalLink')+' · '+
+    openFourTx(market.hash,'View launch transaction')+'</p>'+
+    '<p class="marketDemoNotice">Token: '+token+'</p>'+
+    '<p class="marketDemoNotice">Quotes and fees come from OpenFour. The 10% creator allocation is planned for a future preset.</p>'+
+    orderFields('openFourOrder',false)+'</section>');
+  const root=$('#momentTicket'), form=root.querySelector('form'), panel=root.querySelector('.momentOrderPreview');
+  const status=root.querySelector('.momentTradeStatus');
+  root.querySelector('.momentBack').onclick=back;
+  let busy=false;
+  form.addEventListener('input',()=>{if(!busy)panel.hidden=true;});
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();
+    event.stopPropagation();
+    if(busy)return;
+    const side=event.submitter?.value==='sell'?'sell':'buy';
+    const field=form.elements[side==='buy'?'budget':'percent'];
+    if(!field.reportValidity())return;
+    busy=true;panel.hidden=true;status.textContent='Requesting an OpenFour quote…';
+    try{
+      const order=await window.pulseOpenFour.preview(market,side,field.value);
+      if(!root.isConnected||!$('dialog').open)return;
+      const label=side==='buy'?'Buy':'Sell';
+      status.textContent='';
+      panel.innerHTML='<p>'+label+' '+esc(order.quantity)+' coins</p><p>'+(side==='buy'?'Estimated cost: ':'Estimated proceeds: ')+
+        esc(order.total)+' tBNB · OpenFour fees: '+esc(order.fee)+' tBNB</p><small>Wallet gas is shown separately.</small><button type="button" class="primary">Confirm '+label+'</button>';
+      panel.hidden=false;
+      const confirm=panel.querySelector('button');
+      confirm.onclick=async()=>{
+        if(busy)return;
+        busy=true;confirm.disabled=true;
+        let hash;
+        try{
+          hash=await order.confirm(value=>{
+            hash=value;
+            status.innerHTML='Trade submitted. '+openFourTx(hash);
+          });
+          status.innerHTML='Trade confirmed. '+openFourTx(hash);
+        }catch(error){
+          status.textContent=error.shortMessage||error.message;
+          if(hash)status.insertAdjacentHTML('beforeend',' '+openFourTx(hash));
+        }finally{busy=false;panel.hidden=true;}
+      };
+    }catch(error){status.textContent=error.shortMessage||error.message;}
+    finally{busy=false;}
+  });
 }
 function openDemoCreatorTrade(creator,options){
   if(!creator?.coin)return;
@@ -1155,23 +1292,22 @@ function openDemoTrade(market,{back=()=>$('dialog').close(),now=Date.now()}={}){
   const history=demoMarketHistory(position,sampleScope,now,marketRange,curve);
   const imageStyle=reel?frameArt(coin,reel):'', cap=curveMarketCap(position.sold,curve), balance=momentBNB(BigInt(ledger.cash));
   const source=creator?link(esc(creator.name),'Profile/'+creator.id,'subtle'):btn(esc(reel.title)+' ↗',momentAction('momentDetail',reel,coin),'subtle');
+  const attribution=creator?'':'<p class="momentSource">Original clip by '+esc(chan(reel.owner).name)+'</p>';
   modal('<section id="momentTicket" aria-label="'+(creator?'Creator':'Moment')+' Coin trading">'+
     '<div class="momentMarketHeader"><button type="button" class="momentBack" aria-label="Back" title="Back">'+
     '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5m7-7-7 7 7 7"/></svg></button></div>'+
     '<div class="momentAsset"><span class="momentAssetArt" aria-hidden="true" style="'+imageStyle+'">'+(imageStyle?'':esc(coin.name[0]))+'</span>'+
     '<div class="momentAssetMeta"><h2>'+label+' <span class="demoLabel">Demo</span></h2>'+source+switcher+'</div>'+
     '<div class="momentAssetPrice"><strong>'+marketUsd(cap)+'</strong><small>Market cap</small></div></div>'+
+    attribution+'<p class="marketDemoNotice">'+marketDemoNotice+'</p>'+
     '<div class="momentChart"><div class="momentChartHeading"><strong>History · '+marketRange+'</strong><small>USD</small></div>'+
-    momentMarketChart(curve,history)+'</div>'+
+    momentMarketChart(curve,history,position.sold)+'</div>'+
     '<div class="momentPosition"><div class="momentTradeStats"><div><small>Your coins</small><strong>'+fmt(position.owned)+'</strong></div>'+
     '<div><small>Demo balance</small><strong>'+balance+' tBNB</strong></div></div>'+
     '<label class="momentTradeProgress">Curve reserve <strong>'+momentBNB(reserve)+' / '+momentBNB(curve.target)+' tBNB</strong><progress max="'+curve.target+'" value="'+reserve+'"></progress></label></div>'+
     momentFillList(fills)+
     '<div class="momentTradeFooter">'+(complete?'<p>Curve fully bought. Sell to redeem from the demo reserve.</p>':'')+
-      '<form id="momentOrder" novalidate><div class="momentOrderActions"><label>Buy budget (tBNB)<input name="budget" type="number" min="0.0000000000000001" step="any" value="0.05" required></label>'+
-      '<label>Sell (% of holdings)<input name="percent" type="number" min="1" max="100" step="1" value="100" required></label>'+
-      '<button class="tradeBuy" type="submit" value="buy" '+(complete?'disabled':'')+'>Preview buy</button><button class="tradeSell" type="submit" value="sell">Preview sell</button></div></form>'+
-      '<div class="momentOrderPreview" hidden></div>'+'<p class="momentTradeStatus" role="status"></p></div></section>');
+      orderFields('momentOrder',complete)+'</div></section>');
   $('.momentBack').onclick=back;
   const select=$('#momentCoinSelect');
   select?.addEventListener('change',()=>{
@@ -1180,9 +1316,19 @@ function openDemoTrade(market,{back=()=>$('dialog').close(),now=Date.now()}={}){
     openMomentTrade(reel,next,{back});
     $('#momentCoinSelect')?.focus({preventScroll:true});
   });
-  const form=$('#momentOrder');
-  if(!form)return;
-  const panel=$('.momentOrderPreview'), status=$('.momentTradeStatus');
+  mountDemoOrder($('#momentTicket'),market,()=>now,()=>openDemoTrade(market,{back}));
+}
+function orderFields(id,complete,inline=false){
+  const buyLabel='<label>Buy budget (tBNB)<input name="budget" type="number" min="0.0000000000000001" step="any" value="0.05" required></label>';
+  const sellLabel='<label>Sell (% of holdings)<input name="percent" type="number" min="1" max="100" step="1" value="100" required></label>';
+  const buy='<button class="tradeBuy" type="submit" value="buy" '+(complete?'disabled':'')+'>'+(inline?'Buy':'Preview buy')+'</button>';
+  const sell='<button class="tradeSell" type="submit" value="sell">'+(inline?'Sell':'Preview sell')+'</button>';
+  return '<form id="'+id+'" novalidate><div class="momentOrderActions">'+(inline?buyLabel+buy+sellLabel+sell:buyLabel+sellLabel+buy+sell)+
+    '</div></form><div class="momentOrderPreview" hidden></div><p class="momentTradeStatus" role="status"></p>';
+}
+function mountDemoOrder(root,{marketId,curve,sampleScope},marketTime,afterTrade){
+  const form=root.querySelector('form');
+  const panel=root.querySelector('.momentOrderPreview'),status=root.querySelector('.momentTradeStatus');
   form.addEventListener('input',()=>{panel.hidden=true;status.textContent='';});
   form.addEventListener('submit',event=>{
     event.preventDefault();event.stopPropagation();
@@ -1192,9 +1338,11 @@ function openDemoTrade(market,{back=()=>$('dialog').close(),now=Date.now()}={}){
       const sell=event.submitter?.value==='sell';
       const input=form.elements[sell?'percent':'budget'];
       if(!input.reportValidity()||!input.value)return;
-      const snapshot=demoTradePosition(momentLedger(),marketId,sampleScope,now);
-      if(sell)quote=quoteMoment(snapshot,'sell',Math.floor(snapshot.owned*input.valueAsNumber/100),curve);
-      else{
+      const snapshot=demoTradePosition(momentLedger(),marketId,sampleScope,marketTime());
+      if(sell){
+        if(!snapshot.owned)throw Error('You do not hold any coins to sell.');
+        quote=quoteMoment(snapshot,'sell',Math.floor(snapshot.owned*input.valueAsNumber/100),curve);
+      }else{
         const parts=input.value.match(/^(\d*)(?:\.(\d{0,16}))?$/);
         if(!parts)throw Error('Enter a tBNB amount with up to 16 decimal places.');
         const budget=BigInt(parts[1]||0)*momentUnit+BigInt((parts[2]||'').padEnd(16,'0'));
@@ -1218,11 +1366,11 @@ function openDemoTrade(market,{back=()=>$('dialog').close(),now=Date.now()}={}){
         const walletScope=accountScope;
         const execute=()=>{if(walletScope!==accountScope)throw Error('Account changed. Preview again.');return settleMoment(marketId,quote,curve,sampleScope);};
         const fill=navigator.locks?await navigator.locks.request(ledgerKey(),execute):execute();
-        if(!status.isConnected||!$('dialog').open)return;
+        if(!status.isConnected||root.id==='momentTicket'&&!$('dialog').open)return;
         if($('.marketHome'))render();
         if($('#demoHoldings'))$('#demoHoldings').innerHTML=momentHoldings();
-        openDemoTrade(market,{back});
-        $('.momentTradeStatus').textContent=(buy?'Bought ':'Sold ')+fmt(fill.quantity)+' coins for '+momentBNB(fill.amount)+' tBNB.';
+        afterTrade();
+        (status.isConnected?status:$('#momentTicket .momentTradeStatus')).textContent=(buy?'Bought ':'Sold ')+fmt(fill.quantity)+' coins for '+momentBNB(fill.amount)+' tBNB.';
       }catch(error){
         if(!status.isConnected)return;
         panel.hidden=true;status.textContent=error.message;
@@ -1237,10 +1385,7 @@ function openReelTrade(reel,source){
   if(coins.length===1)return openMomentTrade(reel,coins[0]);
   const creator=chan(reel.owner);
   if(!creator?.coin)return openMoment(reel,source);
-  if(!useTestnetFills)return openDemoCreatorTrade(creator);
-  modal('<div class="reelTradeHeading"><small>CREATOR MARKET</small><strong>'+esc(creator.name)+'</strong></div>'+
-    '<div id="reelTicket" class="chainPanel" data-owner="'+esc(creator.id)+'"></div>');
-  paintWallet();
+  return openDemoCreatorTrade(creator);
 }
 async function shareReel(reel){
   if(!reel)return;
@@ -1377,13 +1522,13 @@ function openMomentPicker(reel){
   const coins=momentsFor(reel.id), ledger=momentLedger();
   modal('<section class="momentSheet"><h2>Moment Coins</h2><p class="momentSource">'+esc(reel.title)+'</p>'+
     '<ul class="momentPicker">'+coins.map(coin=>{
-      const scope=isSampleMoment(reel.id,coin)?'moment-'+reel.id:null;
-      const position=demoTradePosition(ledger,coin.ledgerId||coin.id||reel.id,scope,Date.now()),art=frameArt(coin,reel);
+      const scope=momentSampleScope(reel,coin);
+      const position=coin.openFour?null:demoTradePosition(ledger,coin.ledgerId||coin.id||reel.id,scope,Date.now()),art=frameArt(coin,reel);
       return '<li><button type="button" class="momentPickerCoin" data-act="'+momentAction('momentDetail',reel,coin)+'">'+
         '<span class="assetArt" style="'+frameArt(coin,reel)+'" aria-hidden="true">'+(art?'':esc(coin.name[0]))+
         '<canvas class="momentPickerFrame" '+(coin.frame?'hidden':'')+' width="112" height="112"></canvas></span>'+
         '<span class="momentPickerName"><strong>'+esc(coin.name)+'</strong><small>Frame '+momentTime(coin.time)+'</small></span></button>'+
-        '<dl class="momentPickerStats"><div><dt>Market cap</dt><dd>'+marketUsd(momentMarketCap(position))+'</dd></div>'+
+        '<dl class="momentPickerStats"><div><dt>Market cap</dt><dd>'+(position?marketUsd(momentMarketCap(position)):'—')+'</dd></div>'+
         '<div><dt>Age</dt><dd>'+esc(marketAge(momentCreatedAt(coin)))+'</dd></div></dl>'+
         btn('Trade',momentAction('tradeMoment',reel,coin),'marketTrade')+'</li>';
     }).join('')+'</ul>'+btn('Create another Moment Coin','newMoment:'+esc(reel.id),'primary')+'</section>');
@@ -1391,18 +1536,25 @@ function openMomentPicker(reel){
 }
 function openMoment(reel,source,existing=momentFor(reel?.id)){
   if(!reel)return;
+  const credit='Original clip by <strong>'+esc(chan(reel.owner).name)+'</strong> · '+link('Watch original clip','Clips/'+reel.id,'momentOriginalLink');
   const media=source?.getAttribute('src')||momentMedia(reel);
   if(!media&&!existing?.frame)return toast('This clip is unavailable.');
   if(existing?.frame){
-    modal('<section class="momentSheet"><h2>'+esc(existing.name)+'</h2><img class="savedFrame" alt="Captured frame" src="'+esc(existing.frame)+'"><p>'+esc(existing.description)+'</p><p>'+momentTime(existing.time)+' · '+esc(existing.launcher)+'</p><div class="momentDetailActions">'+btn('Trade',momentAction('tradeMoment',reel,existing),'primary')+shareMomentButton(existing,reel)+btn('Create another Moment Coin','newMoment:'+esc(reel.id),'subtle')+'</div></section>');
+    modal('<section class="momentSheet"><h2>'+esc(existing.name)+'</h2><img class="savedFrame" alt="Captured frame" src="'+esc(existing.frame)+'"><p>'+esc(existing.description)+'</p><p class="momentSource">'+credit+'</p><p>'+momentTime(existing.time)+' · '+esc(existing.launcher)+'</p><div class="momentDetailActions">'+btn('Trade',momentAction('tradeMoment',reel,existing),'primary')+shareMomentButton(existing,reel)+btn('Create another Moment Coin','newMoment:'+esc(reel.id),'subtle')+'</div></section>');
     return;
   }
+  const useOpenFour=Boolean(window.pulseOpenFour?.enabled);
+  const pendingKey=stateKey+':openfour-launch:'+reel.id;
+  const readPending=()=>readStore(pendingKey,value=>value?.coin);
+  const draft=useOpenFour&&readPending();
+  const pendingLaunch=draft?.transaction?draft:null;
+  let inFlight=false;
   const hasCrop=!existing||Boolean(existing.crop);
   const resume=source&&!source.paused;
   source?.pause();
   const start=existing?.time??source?.currentTime??0;
   modal('<section class="momentSheet"><h2>'+(existing?'Moment Coin':'Create Moment Coin')+'</h2>'+
-    '<p class="momentSource">'+esc(reel.title)+' · '+esc(chan(reel.owner).name)+'</p>'+
+    '<p class="momentSource">'+(existing?credit:esc(reel.title)+' · '+esc(chan(reel.owner).name))+'</p>'+
     '<video crossorigin="anonymous" class="momentPreview" muted playsinline preload="auto" src="'+esc(media)+'"'+(hasCrop?' hidden':' aria-label="Selected frame"')+'></video>'+
     (hasCrop?'<canvas class="momentCrop" width="512" height="512" '+(existing?'role="img" aria-label="Cropped Moment Coin frame"':'tabindex="0" aria-label="Crop preview" aria-describedby="momentCropHelp"')+'></canvas>':'')+
     (existing?'<h3>'+esc(existing.name)+'</h3><p>'+esc(existing.description)+'</p><p>Frame '+momentTime(existing.time)+' · Created by '+esc(existing.launcher||'You')+'</p><small>Demo Moment Coin</small><div class="momentDetailActions">'+btn('Trade',momentAction('tradeMoment',reel,existing),'primary')+shareMomentButton(existing,reel)+
@@ -1412,8 +1564,14 @@ function openMoment(reel,source,existing=momentFor(reel?.id)){
       '<div class="momentCropControls"><label class="momentZoom">Zoom <output>1.00×</output><input name="zoom" type="range" min="1" max="4" step=".05" value="1"></label><button type="button" class="subtle momentCropReset">Reset crop</button></div>'+
       '<p id="momentCropHelp">Drag the frame or use arrow keys to position it.</p>'+
       '<label>Coin name<input name="name" maxlength="60" required></label>'+
+      (useOpenFour?'<label>Token symbol<input name="symbol" pattern="[A-Z0-9]{2,8}" maxlength="8" placeholder="2–8 uppercase letters or digits" required></label>':'')+
       '<label>Description<textarea name="description" maxlength="220" rows="2" required></textarea></label>'+
-      '<button type="submit" class="primary" disabled>Create demo coin</button><small>'+(shared&&window.pulseWallet.signed()?'Published to the shared demo market':'Guest demo · saved on this device')+'</small></form>')+
+      '<section class="momentLaunchReview" aria-label="Review and launch"><h3>Review &amp; Launch</h3>'+
+      '<p>'+credit+'</p>'+
+      (useOpenFour?'<p>OpenFour Bonding V1 · BSC Testnet. The 10% creator allocation is planned for a future preset.</p><p>OpenFour fees are quoted before trading. Wallet gas applies.</p>':
+       '<p>'+momentCreatorAllocation+'</p><p>OpenFour Testnet is unavailable in this preview. Demo trading fee: 0%.</p><p>Planned fee per trade: 0.75% (0.50% to the original clip creator and 0.25% to Pulse).</p>')+'</section>'+
+      (pendingLaunch?'<button type="button" class="primary" id="recoverOpenFour">Check pending launch</button>':'<button type="submit" class="primary" disabled>'+(useOpenFour?'Launch on OpenFour':'Create demo coin')+'</button>')+
+      '<small>'+(useOpenFour?'Token launches on Testnet. This browser saves its link to the clip.':shared&&window.pulseWallet.signed()?'Published to the shared demo market':'Guest demo · saved on this device')+'</small></form>')+
     '<p class="momentStatus" role="status">Loading clip…</p></section>');
   const dialog=$('dialog'), preview=$('.momentPreview'), form=$('#momentLaunch'), status=$('.momentStatus');
   const track=form?.elements.frame, submit=form?.querySelector('button[type=submit]');
@@ -1438,16 +1596,47 @@ function openMoment(reel,source,existing=momentFor(reel?.id)){
   const ready=()=>{
     if(preview.readyState<2||preview.seeking||preview.error)return;
     editor?.redraw();
-    status.textContent='';if(submit)submit.disabled=false;
+    if(!inFlight&&(!useOpenFour||!readPending()?.transaction)){status.textContent='';if(submit)submit.disabled=false;}
   };
   preview.addEventListener('loadeddata',ready);
   preview.addEventListener('seeked',ready);
   preview.addEventListener('seeking',()=>{if(submit)submit.disabled=true;});
   preview.addEventListener('error',()=>{status.textContent='Unable to load this clip.';if(submit)submit.disabled=true;});
+  function saveOpenFourCoin(coin){
+    const latest=readStore(stateKey,value=>value&&typeof value==='object');
+    s.moments={...s.moments,...latest?.moments};
+    const local=momentsFor(reel.id).filter(item=>!item.published&&item.id!==coin.id);
+    s.moments[reel.id]=[...local,coin];
+    save();
+    localStorage.removeItem(pendingKey);
+    const byline=[...document.querySelectorAll('.reel')].find(item=>item.dataset.id===reel.id)?.querySelector('.byline');
+    if(byline){
+      const badge=byline.querySelector('.momentPill');
+      if(badge)badge.outerHTML=momentBadge(reel);
+      else byline.insertAdjacentHTML('beforeend',momentBadge(reel));
+    }
+    if(form.isConnected&&dialog.open)openMomentTrade(reel,coin);
+  }
+  const recover=$('#recoverOpenFour');
+  if(recover)recover.onclick=async()=>{
+    recover.disabled=true;
+    try{
+      const market=await window.pulseOpenFour.recover(pendingLaunch.transaction);
+      saveOpenFourCoin({...pendingLaunch.coin,openFour:market});
+    }catch(error){
+      status.textContent=error.shortMessage||error.message;
+      status.insertAdjacentHTML('beforeend',' '+openFourTx(pendingLaunch.transaction.hash));
+      if(error.definitiveRevert){
+        localStorage.removeItem(pendingKey);
+        recover.textContent='Return to launch';
+        recover.onclick=()=>openMoment(reel,source,null);
+      }
+    }finally{recover.disabled=false;}
+  };
   if(form)form.addEventListener('submit',async event=>{
     event.preventDefault();
     event.stopPropagation();
-    if(submit.disabled)return;
+    if(!submit||submit.disabled||inFlight)return;
     const name=form.elements.name.value.trim(), description=form.elements.description.value.trim();
     if(!name||!description){status.textContent='Enter a coin name and description.';return;}
     const latest=readStore(stateKey,v=>v&&typeof v==='object');
@@ -1455,10 +1644,32 @@ function openMoment(reel,source,existing=momentFor(reel?.id)){
     const previous=s.moments[reel.id], coins=momentsFor(reel.id);
     const coin={name,description,time:Number(track.value),crop:editor.crop,ownerId:reel.owner,clipId:reel.id,
       createdAt:Date.now(),launcher:self()?.name||'You'};
-    const publish=Boolean(shared&&window.pulseWallet.signed());
-    submit.disabled=true;
+    const publish=!useOpenFour&&Boolean(shared&&window.pulseWallet.signed());
+    inFlight=true;submit.disabled=true;
     try{
       coin.frame=$('.momentCrop').toDataURL('image/jpeg',.74);
+      if(useOpenFour){
+        coin.id=crypto.randomUUID();
+        coin.symbol=form.elements.symbol.value.trim();
+        const launch=async()=>{
+          if(readPending()?.transaction)throw Error('A launch is pending. Reopen this sheet to check it.');
+          localStorage.setItem(pendingKey,JSON.stringify({coin}));
+          try{
+            coin.openFour=await window.pulseOpenFour.launch(coin,transaction=>{
+              localStorage.setItem(pendingKey,JSON.stringify({coin,transaction}));
+              status.innerHTML='Launch submitted. '+openFourTx(transaction.hash);
+            });
+          }catch(error){
+            const pending=readPending();
+            if(!pending?.transaction||error.definitiveRevert)localStorage.removeItem(pendingKey);
+            throw error;
+          }
+          saveOpenFourCoin(coin);
+        };
+        if(navigator.locks)await navigator.locks.request(pendingKey,launch);
+        else await launch();
+        return;
+      }
       if(publish){
         coin.id=form.dataset.coinId||=crypto.randomUUID();
         await shared.post('moments',{id:coin.id,clip:reel.id,name,description,frame_time:coin.time,frame:coin.frame});
@@ -1469,7 +1680,18 @@ function openMoment(reel,source,existing=momentFor(reel?.id)){
       }
     }catch(e){
       if(!publish){if(previous===undefined)delete s.moments[reel.id];else s.moments[reel.id]=previous;}
-      status.textContent=e.message||'Could not save this Moment Coin.';submit.disabled=false;return;
+      status.textContent=e.shortMessage||e.message||'Could not save this Moment Coin.';
+      const pending=useOpenFour&&readPending();
+      if(pending?.transaction){
+        status.insertAdjacentHTML('beforeend',' '+openFourTx(pending.transaction.hash));
+        const check=document.createElement('button');
+        check.type='button';check.className='subtle';check.textContent='Check pending launch';
+        check.onclick=()=>openMoment(reel,source,null);
+        status.append(' ',check);
+      }else submit.disabled=false;
+      return;
+    }finally{
+      inFlight=false;
     }
     if(!form.isConnected)return;
     const byline=[...document.querySelectorAll('.reel')].find(item=>item.dataset.id===reel.id)?.querySelector('.byline');
@@ -1533,13 +1755,16 @@ function updateReelSocial(id){
   if(badge)badge.outerHTML=momentBadge(reel);else article.querySelector('.byline').insertAdjacentHTML('beforeend',momentBadge(reel));
 }
 function aboutPulse(category='overview'){
-  const overview='<p>Pulse is a short-video platform for clips of any genre. We started Pulse after seeing memorable clips turn into meme coins with little going back to the people who made them.</p>'+
-    '<p>Creators can launch a Creator Coin for their channel. When a clip makes you laugh or sticks with you, capture a frame, add a name and description, and turn it into a Moment Coin tied to the original video.</p>';
+  const overview='<p><strong>Turn a clip you love into a Moment Coin and give its creator a share.</strong></p>'+
+    '<p>We started Pulse after seeing memorable clips turn into meme coins with little going back to the people who made them.</p>'+
+    '<p>If a funny scene or a standout moment catches your eye, capture and crop that frame, name your coin, and launch it from the clip. Videos can be about anything. Viewers decide which moments are worth sharing.</p>'+
+    '<p>Every Moment Coin credits the original clip creator and links back to their video. '+momentCreatorAllocation+'</p>'+
+    '<p>Creators can also launch a Creator Coin for their channel.</p>';
   const fees='<h3>Moment Coin trading fees</h3><p>Pulse’s planned production fee applies to each buy or sell on the bonding curve.</p>'+
     '<dl class="aboutRates"><dt><strong>Total trading fee</strong></dt><dd>0.75%</dd>'+
     '<dt>Original clip creator</dt><dd>0.50%</dd><dt>Pulse protocol</dt><dd>0.25%</dd></dl>'+
     '<p>Percentages are based on the trade amount. Network gas is charged separately.</p>'+
-    '<h3>Moment Coin allocation</h3><p>At launch, 10% of the total coin supply is reserved for the original clip creator, separate from trading fees.</p>';
+    '<h3>Moment Coin allocation</h3><p>'+momentCreatorAllocation+' The allocation is separate from the trading fee.</p>';
   modal('<section class="aboutPulse" aria-labelledby="aboutPulseTitle">'+
   '<h2 id="aboutPulseTitle">About us</h2>'+
   viewTabs('About us categories',[['overview','Overview'],['fees','Fees']],category,'aboutCategory')+
@@ -1617,7 +1842,7 @@ if(k==='reelSound'){
   if(video.paused)watch.play();
   return;
 }
-if(k==='demoCreatorTrade')return openDemoCreatorTrade(chan(v),{now:el?.closest('.marketRow')?marketPaintedAt:undefined});
+if(k==='demoCreatorTrade')return openDemoCreatorTrade(chan(v),{now:el?.closest('.marketRow,.demoMarketDetail')?marketPaintedAt:undefined});
 if(k==='publishMoment')return publishSavedMoment(clip(v),momentFor(v,id),el);
 if(k==='tradeMoment'||k==='momentDetail'||k==='reelMoment'||k==='newMoment'){
   const reel=clip(v);
@@ -1644,16 +1869,23 @@ if(k==='reelShare')return shareReel(clip(v));if(k==='reelTrade')return openReelT
   exploreLimit=24;exploreTab=v;return go('Search');
 }if(k==='group'){marketGroup=v;return render();}
 
-if(k==='marketTime'||k==='marketSource'){
-  if(k==='marketTime'&&Object.hasOwn(marketWindows,v))marketRange=v;
-  if(k==='marketSource')useTestnetFills=v==='testnet';
+if(k==='marketTime'&&Object.hasOwn(marketWindows,v)){
+  marketRange=v;
+  const terminal=el.closest('.demoMarketDetail');
+  if(terminal){
+    for(const button of el.parentElement.querySelectorAll('button'))button.setAttribute('aria-pressed',String(button===el));
+    terminal.querySelector('.momentOrderPreview').hidden=true;
+    refreshTradeTerminal(terminal);
+    return;
+  }
   render();document.querySelector('.marketControls [data-act="'+k+':'+v+'"]')?.focus({preventScroll:true});return;
 }
 if(k==='watch'){const list=s.watchlist||[];s.watchlist=list.includes(v)?list.filter(x=>x!==v):[...list,v];save();return render();}
-if(k==='create')return create();if(k==='channel')return channelForm('profile');if(k==='launch')return modal('<h2>Launch Channel coin</h2><p>Every video on your channel will link to this coin.</p><form id="launch"><label>Coin symbol (2–8 letters, A–Z)<input required pattern="[A-Za-z]{2,8}" name="symbol"></label><p>Choose a symbol, then open the market to register your coin with your wallet on BSC Testnet.</p><button class="primary">Confirm launch</button></form>');if(k==='toggle'){s[v]=s[v].includes(id)?s[v].filter(x=>x!==id):[...s[v],id];save();el.classList.toggle('selected',s[v].includes(id));el.setAttribute('aria-pressed',String(s[v].includes(id)));
+if(k==='create')return create();if(k==='channel')return channelForm('profile');if(k==='launch')return modal('<h2>Launch Channel coin</h2><p>Every video on your channel will link to this coin.</p><form id="launch"><label>Coin symbol (2–8 letters, A–Z)<input required pattern="[A-Za-z]{2,8}" name="symbol"></label><p>Choose a symbol, then open its demo market.</p><button class="primary">Confirm launch</button></form>');if(k==='toggle'){s[v]=s[v].includes(id)?s[v].filter(x=>x!==id):[...s[v],id];save();el.classList.toggle('selected',s[v].includes(id));el.setAttribute('aria-pressed',String(s[v].includes(id)));
 if(v==='likes'){const n=reelLikeCount(clip(id));el.querySelector('small').textContent=shortNumber.format(n);el.setAttribute('aria-label','Like · '+fmt(n));}
 return;}if(k==='category'){category=+v;metric=0;}if(k==='metric')metric=+v;if(k==='range')period=+v;if(k==='tab')tab=+v;if(k==='side')side=v;render();}
 document.addEventListener('click',e=>{
+  if(e.target.closest('.momentOriginalLink')&&!e.metaKey&&!e.ctrlKey&&!e.shiftKey&&!e.altKey)$('dialog').close();
   const center=e.target.closest('.momentGesture');
   if(center){
     const reel=center.closest('.reel'), video=reel.querySelector('video');
@@ -1684,19 +1916,18 @@ function updateVisibleData(){
   if($('dialog').open){refreshAfterClose=true;return;}
   const [route,id]=path();
   if(route==='Moment'){render();return;}
+  if(route==='Trading'&&id&&$('.demoMarketDetail')&&$('main').contains(document.activeElement)&&document.activeElement.closest('.terminalOrder'))return;
   if(route==='Clips'&&$('.feed')&&(!id||clip(id))){
     const root=$('.feed');
     for(const node of root.querySelectorAll('.reel')){
       if(!clip(node.dataset.id)){if(node.contains(activeReelWatch?.video))activeReelWatch.video.pause();node.remove();continue;}
       updateReelSocial(node.dataset.id);
     }
-    const added=feedItems(id).filter(reel=>!root.querySelector('[data-id="'+CSS.escape(reel.id)+'"]'));
-    if(added.length){
-      const fragment=document.createElement('template');fragment.innerHTML=feed(id);
-      for(const reel of added){
-        const article=fragment.content.querySelector('[data-id="'+CSS.escape(reel.id)+'"]');
-        root.append(article);observer?.observe(article);
-      }
+    const desired=feedItems(id).map(reel=>reel.id);
+    const visible=[...root.querySelectorAll('.reel')].map(node=>node.dataset.id);
+    if(desired.join()!==visible.join()){
+      if(!id&&visible.length===1&&visible[0]==='1')feedRoute=null;
+      return render();
     }
     return;
   }
@@ -1868,7 +2099,7 @@ async function submitShared(form, data) {
 }
 
 document.addEventListener('submit',async e=>{let f=e.target;if(!f.id)return;e.preventDefault();let d=new FormData(f);if(f.id==='profilePhoto')return saveProfilePhoto(f);if(f.id==='profileDetailsForm')return saveProfileDetails(f,d);if(shared && ['channel','launch','upload'].includes(f.id))return submitShared(f,d);if(['reelComment','reelReport','inboxMessage'].includes(f.id))return submitSocial(f,d);if(f.id==='channel'){let name=d.get('name').trim();if(!name)return formError(f,'Enter a channel name.');if(!self())s.channels.push({id:'me',name,followers:[[Date.now(),0]],following:0});save();if(f.dataset.next==='create')return create();go('Profile');}
-if(f.id==='launch'){let c=self(),symbol=d.get('symbol').toUpperCase();if(c.coin||s.channels.some(x=>x.coin===symbol))return formError(f,'This symbol is already taken.');Object.assign(c,{coin:symbol,supply:1000000,prices:[[Date.now(),1]]});toast('Coin symbol saved. Open the market to launch.');}
+if(f.id==='launch'){let c=self(),symbol=d.get('symbol').toUpperCase();if(c.coin||s.channels.some(x=>x.coin===symbol))return formError(f,'This symbol is already taken.');Object.assign(c,{coin:symbol,supply:1000000,prices:[[Date.now(),1]]});toast('Coin symbol saved. Open its demo market.');}
 if(f.id==='upload'){let file=d.get('video'),title=d.get('title').trim();if(!title||!file.type.startsWith('video/'))return formError(f,'Enter a title and choose a video.');f.querySelector('button').disabled=true;try{if(file.size>50*1024*1024||!['video/mp4','video/webm','video/quicktime'].includes(file.type))throw Error('Choose an MP4, WebM or MOV file up to 50 MiB.');
 const captions=await readCaptions(f);f.querySelector('.uploadStatus').textContent='Saving video…';
 let db=await dbReady,id=crypto.randomUUID();await new Promise((ok,no)=>{let tx=db.transaction('videos','readwrite');tx.objectStore('videos').put(file,id);tx.oncomplete=ok;tx.onabort=no;});urls[id]=URL.createObjectURL(file);s.clips.push({id,owner:'me',title,captions,createdAt:Date.now(),likes:0,views:[[Date.now(),0]]});tab=0;go('Profile');toast('Video published.');}catch(error){f.querySelector('button').disabled=false;return formError(f,error.message||'Unable to save this video. Try a smaller file.');}}

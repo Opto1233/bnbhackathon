@@ -27,4 +27,8 @@ if (!demo && (typeof url !== 'string' || new URL(url).protocol !== 'https:' ||
     typeof key !== 'string' || !/^sb_publishable_[A-Za-z0-9_-]+$/.test(key))) {
   throw Error('Pulse needs an HTTPS Supabase URL and a publishable key.');
 }
-writeFileSync('dist/pulse-config.js', 'window.PULSE_CONFIG = ' + JSON.stringify({ url, key }) + ';\n');
+const openFourRegistry = process.env.PULSE_OPENFOUR_REGISTRY?.trim() || '';
+if (openFourRegistry && !/^0x[0-9a-f]{40}$/i.test(openFourRegistry)) {
+  throw Error('PULSE_OPENFOUR_REGISTRY must be an EVM address.');
+}
+writeFileSync('dist/pulse-config.js', 'window.PULSE_CONFIG = ' + JSON.stringify({ url, key, openFourRegistry }) + ';\n');
