@@ -26,7 +26,7 @@ On Windows PowerShell, use `$env:PULSE_LOCAL_DEMO = "1"; npm start` for the last
 
 ## OpenFour integration status
 
-The optional BSC Testnet path uses **OpenFour Bonding V1**. Pulse reads the preset schema, sends the launch through `OpenFourCore`, links the `TokenCreated` receipt to the source clip, and uses OpenFour quotes for Buy / Sell. The launch and trading code was exercised against a local contract fixture, and the official fork deployment was rehearsed locally. A public Pulse OpenFour Registry on BSC Testnet is pending. The default prototype uses simulated balances and trades with a 0% demo fee.
+The optional BSC Testnet path uses **OpenFour Bonding V1**. Pulse reads the preset schema, sends the launch through `OpenFourCore`, links the `TokenCreated` receipt to the source clip, and uses OpenFour quotes for Buy / Sell. We exercised launch, bonding-curve trades, automatic migration, and PancakeSwap V2 swaps from the Pulse UI on a local OpenFour fork. A public Pulse OpenFour Registry on BSC Testnet is pending. The default prototype uses simulated balances and trades with a 0% demo fee.
 
 Bonding V1 does not enforce Pulse’s proposed 10% creator allocation or production fee split. Those terms require a separate preset.
 

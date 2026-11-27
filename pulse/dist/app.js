@@ -592,6 +592,7 @@ document.addEventListener('visibilitychange',()=>{
 let marketGroup='creators';
 const marketDemoNotice='Charts and trades in this market are simulated.';
 const openFourExplorer='https://testnet.bscscan.com';
+const openFourNetwork=window.PULSE_CONFIG?.openFourLocalFork?'Local BSC fork':'BSC Testnet';
 const momentCreatorAllocation='The launch model reserves 10% of the total supply for the original clip creator. That share stays locked until the coin moves to the liquidity pool.';
 const marketWindows={'1m':60000,'5m':300000,'30m':1800000,'1h':3600000,'24h':86400000};
 let marketRange='1h',marketPaintedAt=0;
@@ -803,7 +804,7 @@ function momentMarket(now){
         name:coin.name,detail:esc(reel.title)+' · '+momentTime(coin.time)+' · '+esc(coin.launcher||'You'),
         art:frameArt(coin,reel),key:'moment-'+id,views:last(reel.views),
         age:momentCreatedAt(coin)??(epoch-(2+demoMetricSeed(id))*3600000),action:btn('Trade',momentAction('tradeMoment',reel,coin),'marketTrade'),
-        sampleScope,onchain:Boolean(coin.openFour),stats:coin.openFour?'<small>BSC Testnet · Bonding V1</small>':sampleMarketStats(sampleScope,now)
+        sampleScope,onchain:Boolean(coin.openFour),stats:coin.openFour?'<small>'+openFourNetwork+' · Bonding V1</small>':sampleMarketStats(sampleScope,now)
       });
     }).join('')+'</section>';
 }
@@ -1215,23 +1216,53 @@ function openMomentTrade(reel,coin,options={}){
     sampleScope:momentSampleScope(reel,coin)},options);
 }
 function openFourTx(hash,label='View transaction'){
-  return /^0x[0-9a-f]{64}$/i.test(hash)?'<a href="'+openFourExplorer+'/tx/'+hash+'" target="_blank" rel="noopener">'+label+'</a>':'';
+  if(!/^0x[0-9a-f]{64}$/i.test(hash))return '';
+  if(window.PULSE_CONFIG?.openFourLocalFork)return esc(label.replace(/^View /,''))+' <code>'+hash+'</code>';
+  return '<a href="'+openFourExplorer+'/tx/'+hash+'" target="_blank" rel="noopener">'+label+'</a>';
 }
 function openOpenFourTrade(reel,coin,{back=()=>$('dialog').close()}={}){
   const market=coin.openFour;
   const token=esc(market.token);
   modal('<section id="momentTicket" aria-label="OpenFour Moment Coin trading"><button type="button" class="momentBack" aria-label="Back">←</button>'+
     '<h2>'+esc(coin.name)+' <span class="demoLabel">OpenFour</span></h2>'+
-    '<p class="momentSource">BSC Testnet · Bonding V1 · Original clip by '+esc(chan(reel.owner).name)+'</p>'+
+    '<p class="momentSource">'+openFourNetwork+' · Bonding V1 · Original clip by '+esc(chan(reel.owner).name)+'</p>'+
     '<p class="momentSource">'+link('Watch original clip','Clips/'+reel.id,'momentOriginalLink')+' · '+
     openFourTx(market.hash,'View launch transaction')+'</p>'+
     '<p class="marketDemoNotice">Token: '+token+'</p>'+
-    '<p class="marketDemoNotice">Quotes and fees come from OpenFour. The 10% creator allocation is planned for a future preset.</p>'+
+    '<p class="marketDemoNotice">The 10% creator allocation is planned for a future preset.</p>'+
+    '<div class="openFourMarketState" role="status"></div>'+
+    '<button type="button" class="subtle openFourMigrate" hidden>Request migration</button>'+
     orderFields('openFourOrder',false)+'</section>');
   const root=$('#momentTicket'), form=root.querySelector('form'), panel=root.querySelector('.momentOrderPreview');
   const status=root.querySelector('.momentTradeStatus');
+  const marketState=root.querySelector('.openFourMarketState'), migrateButton=root.querySelector('.openFourMigrate');
   root.querySelector('.momentBack').onclick=back;
   let busy=false;
+  async function refreshMarket(){
+    const state=await window.pulseOpenFour.marketState(market);
+    if(state.phase===3){
+      marketState.innerHTML='<p><strong>Migrated to PancakeSwap V2</strong></p><p>Pool: <code>'+esc(state.address)+'</code></p>'+
+        '<p>Reserves: '+esc(state.reserveToken)+' coins · '+esc(state.reserveQuote)+' WBNB</p>'+
+        '<p>'+openFourTx(state.hash,'View migration transaction')+'</p>';
+    }else if(state.phase===1){
+      marketState.textContent=(state.paused?'Market paused':'Bonding curve')+' · '+state.raised+' / '+state.target+' tBNB raised · '+state.remaining+' coins remaining';
+    }else{
+      marketState.textContent=state.phase===2||state.phase===5?'Awaiting migration':'Trading unavailable';
+    }
+    form.hidden=state.phase!==3&&(state.phase!==1||state.paused);
+    migrateButton.hidden=state.paused||!(state.phase===2||state.phase===5);
+  }
+  refreshMarket().catch(error=>{marketState.textContent=error.shortMessage||error.message;});
+  migrateButton.onclick=async()=>{
+    if(busy)return;
+    busy=true;migrateButton.disabled=true;
+    try{
+      const hash=await window.pulseOpenFour.migrate(market,value=>{status.innerHTML='Migration submitted. '+openFourTx(value);});
+      status.innerHTML='Migration request confirmed. '+openFourTx(hash);
+      await refreshMarket();
+    }catch(error){status.textContent=error.shortMessage||error.message;}
+    finally{busy=false;migrateButton.disabled=false;}
+  };
   form.addEventListener('input',()=>{if(!busy)panel.hidden=true;});
   form.addEventListener('submit',async event=>{
     event.preventDefault();
@@ -1246,8 +1277,10 @@ function openOpenFourTrade(reel,coin,{back=()=>$('dialog').close()}={}){
       if(!root.isConnected||!$('dialog').open)return;
       const label=side==='buy'?'Buy':'Sell';
       status.textContent='';
+      const fees=order.dex?' · PancakeSwap V2 fee included':' · OpenFour fees: '+esc(order.fee)+' tBNB';
       panel.innerHTML='<p>'+label+' '+esc(order.quantity)+' coins</p><p>'+(side==='buy'?'Estimated cost: ':'Estimated proceeds: ')+
-        esc(order.total)+' tBNB · OpenFour fees: '+esc(order.fee)+' tBNB</p><small>Wallet gas is shown separately.</small><button type="button" class="primary">Confirm '+label+'</button>';
+        esc(order.total)+' tBNB'+fees+'</p><small>Minimum received: '+esc(order.minimum)+(side==='buy'?' coins':' tBNB')+
+        '. Wallet gas is shown separately.</small><button type="button" class="primary">Confirm '+label+'</button>';
       panel.hidden=false;
       const confirm=panel.querySelector('button');
       confirm.onclick=async()=>{
@@ -1260,6 +1293,7 @@ function openOpenFourTrade(reel,coin,{back=()=>$('dialog').close()}={}){
             status.innerHTML='Trade submitted. '+openFourTx(hash);
           });
           status.innerHTML='Trade confirmed. '+openFourTx(hash);
+          await refreshMarket().catch(error=>{marketState.textContent=error.shortMessage||error.message;});
         }catch(error){
           status.textContent=error.shortMessage||error.message;
           if(hash)status.insertAdjacentHTML('beforeend',' '+openFourTx(hash));
@@ -1568,10 +1602,10 @@ function openMoment(reel,source,existing=momentFor(reel?.id)){
       '<label>Description<textarea name="description" maxlength="220" rows="2" required></textarea></label>'+
       '<section class="momentLaunchReview" aria-label="Review and launch"><h3>Review &amp; Launch</h3>'+
       '<p>'+credit+'</p>'+
-      (useOpenFour?'<p>OpenFour Bonding V1 · BSC Testnet. The 10% creator allocation is planned for a future preset.</p><p>OpenFour fees are quoted before trading. Wallet gas applies.</p>':
+      (useOpenFour?'<p>OpenFour Bonding V1 · '+openFourNetwork+'. The 10% creator allocation is planned for a future preset.</p><p>OpenFour fees are quoted before trading. Wallet gas applies.</p>':
        '<p>'+momentCreatorAllocation+'</p><p>OpenFour Testnet is unavailable in this preview. Demo trading fee: 0%.</p><p>Planned fee per trade: 0.75% (0.50% to the original clip creator and 0.25% to Pulse).</p>')+'</section>'+
       (pendingLaunch?'<button type="button" class="primary" id="recoverOpenFour">Check pending launch</button>':'<button type="submit" class="primary" disabled>'+(useOpenFour?'Launch on OpenFour':'Create demo coin')+'</button>')+
-      '<small>'+(useOpenFour?'Token launches on Testnet. This browser saves its link to the clip.':shared&&window.pulseWallet.signed()?'Published to the shared demo market':'Guest demo · saved on this device')+'</small></form>')+
+      '<small>'+(useOpenFour?'This browser saves the link between the clip and the token.':shared&&window.pulseWallet.signed()?'Published to the shared demo market':'Guest demo · saved on this device')+'</small></form>')+
     '<p class="momentStatus" role="status">Loading clip…</p></section>');
   const dialog=$('dialog'), preview=$('.momentPreview'), form=$('#momentLaunch'), status=$('.momentStatus');
   const track=form?.elements.frame, submit=form?.querySelector('button[type=submit]');

@@ -31,4 +31,4 @@ const openFourRegistry = process.env.PULSE_OPENFOUR_REGISTRY?.trim() || '';
 if (openFourRegistry && !/^0x[0-9a-f]{40}$/i.test(openFourRegistry)) {
   throw Error('PULSE_OPENFOUR_REGISTRY must be an EVM address.');
 }
-writeFileSync('dist/pulse-config.js', 'window.PULSE_CONFIG = ' + JSON.stringify({ url, key, openFourRegistry }) + ';\n');
+writeFileSync('dist/pulse-config.js', 'window.PULSE_CONFIG = ' + JSON.stringify({ url, key, openFourRegistry, openFourLocalFork: process.env.PULSE_OPENFOUR_LOCAL_FORK === '1' }) + ';\n');

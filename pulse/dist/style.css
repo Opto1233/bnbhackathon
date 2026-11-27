@@ -477,3 +477,7 @@ main:has(.demoMarketDetail){max-width:1640px;padding-inline:clamp(12px,2.5vw,44p
 .momentLaunchReview{display:grid;gap:5px;margin:14px 0;padding:10px 0;border-top:1px solid #393c32;color:#c2c6b8;font-size:12px}
 .momentLaunchReview h3,.momentLaunchReview strong{color:#f7f6fa}
 .momentOriginalLink{color:#d6fa44}
+
+.openFourMarketState{margin:12px 0;color:#c2c6b8;font-size:12px;overflow-wrap:anywhere}
+.openFourMarketState strong{color:#f7f6fa}
+.openFourMarketState a{color:#d6fa44}
